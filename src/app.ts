@@ -1,5 +1,4 @@
 import { config } from 'dotenv';
-import { HttpStatusCode } from "axios";
 import express from "express";
 import { Server, Socket } from "socket.io";
 import http from "http";
@@ -212,11 +211,11 @@ io.engine.on("connection_error", (err) => {
 // Basic routes
 app.get("/", (req, res) => {
   console.log('Hi');
-  res.status(HttpStatusCode.Ok).json("Hello World!");
+  res.status(200).json("Hello World!");
 });
 
 app.get("/socket", (req, res) => {
-  res.status(HttpStatusCode.Accepted).json({ message: 'Success' });
+  res.status(202).json({ message: 'Success' });
 });
 
 // Start the server
