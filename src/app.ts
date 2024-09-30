@@ -12,9 +12,10 @@ config()
 
 const app = express();
 // Dynamic CORS options
-var whitelist = [process.env.ALLOWED_URL, process.env.ALLOWED_URL_1]
+const whitelist = [process.env.ALLOWED_URL, process.env.ALLOWED_URL_1]
 const corsOptions = {
   origin: function (origin: any, callback: (arg0: Error | null, arg1: boolean | undefined) => void) {
+    console.log('Request Origin:', origin);
     if (whitelist.indexOf(origin) !== -1) {
       callback(null, true)
     } else {
