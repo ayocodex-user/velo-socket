@@ -16,7 +16,7 @@ const whitelist = [process.env.ALLOWED_URL, process.env.ALLOWED_URL_1]
 const corsOptions = {
   origin: function (origin: any, callback: (arg0: Error | null, arg1: boolean | undefined) => void) {
     console.log('Request Origin:', origin);
-    if (whitelist.indexOf(origin) !== -1) {
+    if (whitelist.indexOf(origin) !== -1 || !origin) {
       callback(null, true)
     } else {
       callback(new Error('Not allowed by CORS'), false)
