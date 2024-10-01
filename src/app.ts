@@ -5,8 +5,8 @@ import http from "http";
 import cors from "cors";
 // import { socketCtrl } from "./controller/socket";
 import Redis from "ioredis";
-import { MongoClient, ServerApiVersion } from "mongodb";
-import type { GroupMessageAttributes, MessageAttributes, NewChat_ } from "./types";
+import { MongoClient, ObjectId, ServerApiVersion } from "mongodb";
+import type { GroupMessageAttributes, MessageAttributes, NewChat_, Participant } from "./types";
 
 config()
 
@@ -157,6 +157,52 @@ io.on('connection', async (socket: UserSocket) => {
   socket.on('chatMessage', async (data: MessageAttributes | GroupMessageAttributes) => {
     // console.log('Message')
     // console.log(data)
+    const chats = await client.db(MONGODB_DB).collection('chats').findOne({ _id: new ObjectId(data.chatId as string) });
+    const senderId = 'sender' in data ? data.sender.id : data.senderId;
+    const sender = 'sender' in data ? 'sender' : 'senderId';
+    const senderDetails = 'sender' in data ? data.sender : data.senderId;
+
+    // Messages Collection
+    const message = {
+      _id: data._id as ObjectId,
+      chatId: new ObjectId(data.chatId as string), // Reference to the chat in DMs collection
+      [sender]: senderDetails,
+      receiverId: data.receiverId,
+      content: data.content,
+      timestamp: data.timestamp ? new Date(data.timestamp).toISOString() : new Date().toISOString(),
+      messageType: data.messageType,
+      isRead: {
+        [senderId]: true,
+        [data.receiverId]: false,
+      }, // Object with participant IDs as keys and their read status as values
+      reactions: data.reactions || [],
+      attachments: data.attachments || [],
+      quotedMessage: data.quotedMessage,
+    };
+    // Assuming `message` is defined and contains the necessary properties
+    const updateParticipants = chats?.participants.map((participant: Participant) => {
+        return {
+            updateOne: {
+                filter: { _id: new ObjectId(message.chatId) }, // Match the chat by its ID
+                update: {
+                    $set: {
+                      [`participants.$[p].lastMessageId`]: message._id, // Set lastMessageId to message._id
+                      lastUpdated: new Date().toISOString()
+                    },
+                    $inc: {
+                      [`participants.$[p].unreadCount`]: 1
+                    }
+                },
+                arrayFilters: [{ "p.id": participant.id }] // Filter for the specific participant
+            }
+        };
+    });
+
+    // Perform the bulk update operation
+    await client.db(MONGODB_DB).collection('chats').bulkWrite(updateParticipants);
+    await client.db(MONGODB_DB).collection('chatMessages').insertOne({
+      ...message,
+    });
     if ('messageType' in data && data.messageType === 'Groups') {
       io.to(`group:${data.receiverId}`).emit('newMessage', data);
       // console.log('messageType & Groups')
