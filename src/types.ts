@@ -241,6 +241,10 @@ export interface ConvoType {
       [x: string]: boolean
     }
 }
+export interface ConvoType1 extends ConvoType {
+    userId: string,
+    convo: boolean
+}
 export type hook<P = any, Q = boolean, R = boolean> = {
     payload: P,
     suspense: Q,

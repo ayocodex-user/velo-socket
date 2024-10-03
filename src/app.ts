@@ -6,7 +6,7 @@ import cors from "cors";
 // import { socketCtrl } from "./controller/socket";
 import Redis from "ioredis";
 import { MongoClient, ObjectId, ServerApiVersion } from "mongodb";
-import type { GroupMessageAttributes, MessageAttributes, NewChat_, Participant } from "./types";
+import type { ConvoType, ConvoType1, GroupMessageAttributes, MessageAttributes, NewChat_, Participant } from "./types";
 
 config()
 
@@ -150,8 +150,44 @@ io.on('connection', async (socket: UserSocket) => {
   socket.on('addChat', async (data: NewChat_) => {
     // console.log(data.chat.participants)
     const uniqueParticipants = Array.from(new Set(data.chat.participants.map(participant => `user:${participant.id}`)));
+    console.log(uniqueParticipants)
     io.to(uniqueParticipants).emit('newChat', data);
-    // console.log(uniqueParticipants)
+  });
+
+  socket.on('updateConversation', async (data: {id: string, updates: Partial<ConvoType1>}) => {
+    const { id, updates } = data;
+    console.log(data,socket.userId)
+    const chatId = new ObjectId(id);
+
+    if (data.updates.deleted){
+      if (data.updates.convo){
+        const result = await client.db(MONGODB_DB).collection('chats').deleteOne({ _id: chatId })
+        const result1 = await client.db(MONGODB_DB).collection('chatMessages').deleteMany({ chatId: chatId })
+        // console.log(`Deleted ${result.deletedCount + result1.deletedCount} message(s)`); // Log the result of the deletion
+        return;
+      }
+      const result = await client.db(MONGODB_DB).collection('chatMessages').deleteOne({ $or: [{ _id: chatId }, { Oid: chatId}] })
+      // console.log(`Deleted ${result.deletedCount} message(s)`); // Log the result of the deletion
+      return;
+    }
+
+    const updateFields = Object.keys(updates).map((key) => {
+      return `participants.$[p].${key}`;
+    });
+    const update = {
+      $set: updateFields.reduce((acc, field, index) => {
+        acc[field] = updates[Object.keys(updates)[index] as keyof typeof updates];
+        return acc;
+      }, {} as Record<string, any>),
+    };
+    
+    const options = {
+      arrayFilters: [{ "p.id": updates.userId }],
+    };
+
+    const result = await client.db(MONGODB_DB).collection('chats').updateOne({ _id: chatId }, update, options);
+    // console.log(`Changed prop is ${result}`)
+    io.to(`user:${updates.userId}`).emit('conversationUpdated', { id: chatId.toString(), updates });
   });
 
   socket.on('chatMessage', async (data: MessageAttributes | GroupMessageAttributes) => {
@@ -164,7 +200,7 @@ io.on('connection', async (socket: UserSocket) => {
 
     // Messages Collection
     const message = {
-      _id: data._id as ObjectId,
+      _id: new ObjectId(data._id as string),
       chatId: new ObjectId(data.chatId as string), // Reference to the chat in DMs collection
       [sender]: senderDetails,
       receiverId: data.receiverId,
