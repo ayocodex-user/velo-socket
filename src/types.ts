@@ -103,6 +103,7 @@ export interface NewChatSettings {
     lastSeen: string; // ISO timestamp of the last time the user was online
 }
 
+export type msgStatus = 'sending' | 'sent' | 'delivered' | 'failed';
 export interface MessageAttributes {
     _id?: ObjectId | string;
     chatId: ObjectId | string; // Reference to the chat in Chats collection
@@ -115,6 +116,7 @@ export interface MessageAttributes {
     reactions: string[];
     attachments: string[];
     quotedMessage: string;
+    status: msgStatus;
 }
 
 export interface GroupMessageAttributes {
@@ -135,6 +137,7 @@ export interface GroupMessageAttributes {
     reactions: string[];
     attachments: string[];
     quotedMessage: string;
+    status: msgStatus;
 }
 
 export interface Err {

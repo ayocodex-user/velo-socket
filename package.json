@@ -1,5 +1,5 @@
 {
-  "name": "velo-bun",
+  "name": "velo-socket",
   "version": "1.0.0",
   "type": "module",
   "main": "dist/app.js",

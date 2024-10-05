@@ -7,6 +7,7 @@ import cors from "cors";
 import Redis from "ioredis";
 import { MongoClient, ObjectId, ServerApiVersion } from "mongodb";
 import type { ConvoType, ConvoType1, GroupMessageAttributes, MessageAttributes, NewChat_, Participant } from "./types";
+import { msgStatus } from './types';
 
 config()
 
@@ -62,7 +63,7 @@ const USER_TIMEOUT = 60; // 60 seconds
 export const fetchUserGroups = async (userId: string): Promise<any[]> => {
   return await client.db(MONGODB_DB).collection('chats').find({ 
       'participants.id': userId,
-      'chatType': 'Groups'
+      // 'chatType': 'Groups'
   }).toArray();
 };
 
@@ -214,6 +215,7 @@ io.on('connection', async (socket: UserSocket) => {
       reactions: data.reactions || [],
       attachments: data.attachments || [],
       quotedMessage: data.quotedMessage,
+      status: 'sent' as msgStatus,
     };
     // Assuming `message` is defined and contains the necessary properties
     const updateParticipants = chats?.participants.map((participant: Participant) => {
@@ -260,6 +262,21 @@ io.on('connection', async (socket: UserSocket) => {
 
   socket.on('stopTyping', (data: { userId: string, to: string }) => {
     io.to(`user:${data.to}`).emit('userStopTyping', data);
+  });
+
+  socket.on('offer', (data) => {
+    const { room, offer } = data;
+    socket.to(room).emit('offer', offer);
+  });
+
+  socket.on('answer', (data) => {
+    const { room, answer } = data;
+    socket.to(room).emit('answer', answer);
+  });
+
+  socket.on('candidate', (data) => {
+    const { room, candidate } = data;
+    socket.to(room).emit('candidate', candidate);
   });
 
   socket.on('error', (error) => {
