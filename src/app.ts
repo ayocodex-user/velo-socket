@@ -59,6 +59,7 @@ const MONGODB_DB = 'mydb';
 const ONLINE_USERS_KEY = 'online_users';
 const HEARTBEAT_INTERVAL = 30000; // 30 seconds
 const USER_TIMEOUT = 60; // 60 seconds
+const rooms = new Map();
 
 export const fetchUserGroups = async (userId: string): Promise<any[]> => {
   return await client.db(MONGODB_DB).collection('chats').find({ 
@@ -267,6 +268,20 @@ io.on('connection', async (socket: UserSocket) => {
   socket.on('offer', (data) => {
     const { room, offer } = data;
     socket.to(room).emit('offer', offer);
+  });
+
+  socket.on('join-room', (roomId) => {
+    socket.join(roomId);
+    if (!rooms.has(roomId)) {
+      rooms.set(roomId, new Set());
+    }
+    rooms.get(roomId).add(socket.id);
+
+    if (rooms.get(roomId).size === 2) {
+      socket.to(roomId).emit('user-joined');
+    }
+
+    console.log(`User ${socket.id} joined room ${roomId}`);
   });
 
   socket.on('answer', (data) => {
