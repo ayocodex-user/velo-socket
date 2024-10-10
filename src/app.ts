@@ -114,18 +114,11 @@ io.on('connection', async (socket: UserSocket) => {
       const groups: string[] = (await fetchUserGroups(userId)).map(group =>`group:${group._id.toString()}`);
       if (!isAlreadyConnected) {
         await redis.sadd(ONLINE_USERS_KEY, userId);
-        socket.userId = userId;
-        socket.join(`user:${userId}`);
-        socket.join(groups);
         await updateUserOnlineStatus(userId, true);
-      } else {
-        const rooms = Array.from(socket.rooms);
-        rooms.forEach(room => socket.leave(room));
-        await redis.del(`user:${userId}:online`);
-
-        socket.join(`user:${userId}`);
-        socket.join(groups);
       }
+      socket.userId = userId;
+      socket.join(`user:${userId}`);
+      socket.join(groups);
       // console.log(`User ${userId} joined group:${groups}`);
     }
   });
@@ -267,7 +260,8 @@ io.on('connection', async (socket: UserSocket) => {
 
   socket.on('offer', (data) => {
     const { room, offer } = data;
-    socket.to(room).emit('offer', offer);
+    socket.to(`group:${room}`).emit('offer', {offer, room});
+    console.log('offer: ' + data)
   });
 
   socket.on('join-room', (roomId) => {
@@ -275,7 +269,7 @@ io.on('connection', async (socket: UserSocket) => {
     if (!rooms.has(roomId)) {
       rooms.set(roomId, new Set());
     }
-    rooms.get(roomId).add(socket.id);
+    rooms.get(roomId).add(socket.userId);
 
     if (rooms.get(roomId).size === 2) {
       socket.to(roomId).emit('user-joined');
@@ -284,14 +278,24 @@ io.on('connection', async (socket: UserSocket) => {
     console.log(`User ${socket.id} joined room ${roomId}`);
   });
 
+  socket.on('hangup', (room) => {
+    socket.to(`group:${room}`).emit('remote-hangup', room)
+  })
+
+  socket.on('user-joined', (room) => {
+    socket.to(`group:${room}`).emit('user-joined', room)
+  })
+
   socket.on('answer', (data) => {
     const { room, answer } = data;
-    socket.to(room).emit('answer', answer);
+    socket.to(`group:${room}`).emit('answer', answer);
+    console.log('answer: ' + data)
   });
 
   socket.on('candidate', (data) => {
     const { room, candidate } = data;
-    socket.to(room).emit('candidate', candidate);
+    socket.to(`group:${room}`).emit('candidate', candidate);
+    console.log('candidate: ' + data)
   });
 
   socket.on('error', (error) => {
