@@ -8,12 +8,15 @@ import Redis from "ioredis";
 import { MongoClient, ObjectId, ServerApiVersion } from "mongodb";
 import type { ConvoType, ConvoType1, GroupMessageAttributes, MessageAttributes, NewChat_, Participant } from "./types";
 import { msgStatus } from './types';
+import { uploadFileToS3 } from './s3';
 
 config()
 
-const app = express();
+export const app = express();
+
 // Dynamic CORS options
 const whitelist = [process.env.ALLOWED_URL, process.env.ALLOWED_URL_1]
+
 const corsOptions = {
   origin: function (origin: any, callback: (arg0: Error | null, arg1: boolean | undefined) => void) {
     console.log('Request Origin:', origin);
@@ -35,7 +38,7 @@ const port = 8080;
 type UserSocket = Socket & { userId?: string };
 
 // Create HTTP server
-const server = http.createServer(app);
+export const server = http.createServer(app);
 
 export const io = new Server(server, {
   path: '/wxyrt',
@@ -151,7 +154,7 @@ io.on('connection', async (socket: UserSocket) => {
 
   socket.on('updateConversation', async (data: {id: string, updates: Partial<ConvoType1>}) => {
     const { id, updates } = data;
-    console.log(data,socket.userId)
+    // console.log(data,socket.userId)
     const chatId = new ObjectId(id);
 
     if (data.updates.deleted){
@@ -192,6 +195,28 @@ io.on('connection', async (socket: UserSocket) => {
     const senderId = 'sender' in data ? data.sender.id : data.senderId;
     const sender = 'sender' in data ? 'sender' : 'senderId';
     const senderDetails = 'sender' in data ? data.sender : data.senderId;
+
+      // Handle multiple file uploads (if attachments exist)
+      let attachmentsWithUrls = [];
+      if (data.attachments && data.attachments.length > 0) {
+        // Upload each file to S3 and store the URLs
+        for (const file of data.attachments) {
+          try {
+            const fileBuffer = Buffer.from(file.data); // Assuming file.data is the file content as a Buffer
+            const fileUrl = await uploadFileToS3(fileBuffer, file.name, file.type);
+            attachmentsWithUrls.push({
+              ...file,
+              url: fileUrl, // Add the S3 URL to the attachment
+            });
+          } catch (error) {
+            console.error('Error uploading file to S3:', error);
+            attachmentsWithUrls.push({
+              ...file,
+              url: null, // Mark the file as failed to upload
+            });
+          }
+        }
+      }
 
     // Messages Collection
     const message = {
@@ -262,6 +287,12 @@ io.on('connection', async (socket: UserSocket) => {
     const { room, offer } = data;
     socket.to(`group:${room}`).emit('offer', {offer, room});
     console.log('offer: ' + data)
+  });
+
+  socket.on('callOffer', (data) => {
+    const { room, offer } = data;
+    socket.to(`group:${room}`).emit('offer', {offer, room});
+    console.log('callOffer: ' + data)
   });
 
   socket.on('join-room', (roomId) => {

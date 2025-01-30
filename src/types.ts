@@ -104,6 +104,13 @@ export interface NewChatSettings {
 }
 
 export type msgStatus = 'sending' | 'sent' | 'delivered' | 'failed';
+
+export interface Attachment {
+    name: string; // File name (e.g., "image.png")
+    type: string; // MIME type (e.g., "image/png")
+    data: number[]; // File content as an array of bytes (Uint8Array converted to number[])
+}
+
 export interface MessageAttributes {
     _id?: ObjectId | string;
     chatId: ObjectId | string; // Reference to the chat in Chats collection
@@ -114,7 +121,7 @@ export interface MessageAttributes {
     messageType: string;
     isRead: { [participantId: string]: boolean }; // Object with participant IDs as keys and their read status as values
     reactions: string[];
-    attachments: string[];
+    attachments: Attachment[];
     quotedMessage: string;
     status: msgStatus;
 }
@@ -135,7 +142,7 @@ export interface GroupMessageAttributes {
     messageType: string;
     isRead: { [participantId: string]: boolean }; // Object with participant IDs as keys and their read status as values
     reactions: string[];
-    attachments: string[];
+    attachments: Attachment[];
     quotedMessage: string;
     status: msgStatus;
 }
