@@ -1,18 +1,20 @@
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import multer from 'multer';
+import multerS3 from 'multer-s3';
 
 // Initialize the S3 client
 const s3Client = new S3Client({
-  region: process.env.AWS_REGION, // e.g., 'us-east-1'
+  region: 'us-east-1',
   credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+    accessKeyId: process.env.AWS_ACCESSKEY || '',
+    secretAccessKey: process.env.AWS_SECRETKEY || '',
   },
 });
 
 // Function to upload a file to S3
-export async function uploadFileToS3(file: Buffer, fileName: string, contentType: string) {
+export async function uploadFileToS3(BUCKET_NAME: string, file: Buffer, fileName: string, contentType: string) {
   const params = {
-    Bucket: process.env.AWS_S3_BUCKET_NAME!,
+    Bucket: BUCKET_NAME,
     Key: fileName,
     Body: file,
     ContentType: contentType,
@@ -23,3 +25,17 @@ export async function uploadFileToS3(file: Buffer, fileName: string, contentType
 
   return `https://${params.Bucket}.s3.amazonaws.com/${params.Key}`;
 }
+
+const postUpload = multer({
+  storage: multerS3({
+    s3: s3Client,
+    bucket: 'post-s',
+    metadata: function (req, file, cb) {
+      cb(null, { fieldName: file.fieldname });
+    },
+    key: function (req, file, cb) {
+      const filename = '';
+      cb(null, filename);
+    }
+  })
+});

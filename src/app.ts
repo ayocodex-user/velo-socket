@@ -8,7 +8,7 @@ import Redis from "ioredis";
 import { MongoClient, ObjectId, ServerApiVersion } from "mongodb";
 import type { ConvoType, ConvoType1, GroupMessageAttributes, MessageAttributes, NewChat_, Participant } from "./types";
 import { msgStatus } from './types';
-import { uploadFileToS3 } from './s3';
+import { uploadFileToS3 } from './s3.js';
 
 config()
 
@@ -41,6 +41,7 @@ type UserSocket = Socket & { userId?: string };
 export const server = http.createServer(app);
 
 export const io = new Server(server, {
+  maxHttpBufferSize: 1e8,
   path: '/wxyrt',
   transports: ['websocket', 'polling'],
   pingTimeout: 60000,
@@ -203,15 +204,17 @@ io.on('connection', async (socket: UserSocket) => {
         for (const file of data.attachments) {
           try {
             const fileBuffer = Buffer.from(file.data); // Assuming file.data is the file content as a Buffer
-            const fileUrl = await uploadFileToS3(fileBuffer, file.name, file.type);
+            const fileUrl = await uploadFileToS3('files-for-chat',fileBuffer, file.name, file.type);
             attachmentsWithUrls.push({
-              ...file,
+              name: file.name,
+              type: file.type,
               url: fileUrl, // Add the S3 URL to the attachment
             });
           } catch (error) {
             console.error('Error uploading file to S3:', error);
             attachmentsWithUrls.push({
-              ...file,
+              name: file.name,
+              type: file.type,
               url: null, // Mark the file as failed to upload
             });
           }
@@ -232,7 +235,7 @@ io.on('connection', async (socket: UserSocket) => {
         [data.receiverId]: false,
       }, // Object with participant IDs as keys and their read status as values
       reactions: data.reactions || [],
-      attachments: data.attachments || [],
+      attachments: attachmentsWithUrls || [],
       quotedMessage: data.quotedMessage,
       status: 'sent' as msgStatus,
     };
