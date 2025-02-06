@@ -43,7 +43,7 @@ export const server = http.createServer(app);
 export const io = new Server(server, {
   maxHttpBufferSize: 1e8,
   path: '/wxyrt',
-  transports: ['websocket', 'polling', "webtransport"],
+  transports: ['websocket', 'polling'],
   pingTimeout: 60000,
   pingInterval: 25000,
   cors: corsOptions,
@@ -86,9 +86,14 @@ async function updateUserOnlineStatus(userId: string, isOnline: boolean) {
   io.emit('userStatus', { userId, status });
 }
 
+async function updateLastActive(userId: string) {
+  await redis.set(`user:${userId}:lastActive`, Date.now());
+}
+
 // Socket connection handling
 io.on('connection', async (socket: UserSocket) => {
   // console.log('Connected to the socket ctrl');
+  const userId = socket.handshake.query.userId;
   const BATCH_INTERVAL = 5000; // 5 seconds
   const statusUpdates = new Map();
 
@@ -127,6 +132,12 @@ io.on('connection', async (socket: UserSocket) => {
       socket.join(groups);
       // console.log(`User ${userId} joined group:${groups}`);
     }
+  });
+
+  updateUserOnlineStatus(userId as string, true)
+
+  socket.on('activity', () => {
+    updateLastActive(userId as string);
   });
 
   const heartbeat = setInterval(async () => {
