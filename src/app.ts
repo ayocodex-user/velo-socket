@@ -1,4 +1,5 @@
 import { config } from 'dotenv';
+config()
 import express from "express";
 import { Server, Socket } from "socket.io";
 import http from "http";
@@ -10,7 +11,6 @@ import type { ConvoType, ConvoType1, GroupMessageAttributes, MessageAttributes, 
 import { msgStatus } from './types';
 import { deleteFileFromS3, uploadFileToS3 } from './s3.js';
 
-config()
 
 export const app = express();
 
@@ -43,7 +43,7 @@ export const server = http.createServer(app);
 export const io = new Server(server, {
   maxHttpBufferSize: 1e8,
   path: '/wxyrt',
-  transports: ['websocket', 'polling'],
+  transports: ['websocket', 'polling', "webtransport"],
   pingTimeout: 60000,
   pingInterval: 25000,
   cors: corsOptions,
@@ -74,14 +74,16 @@ export const fetchUserGroups = async (userId: string): Promise<any[]> => {
 
 async function updateUserOnlineStatus(userId: string, isOnline: boolean) {
   const currentStatus = await redis.get(`user:${userId}:online`);
+  let status;
   
   if (isOnline && currentStatus !== 'true') {
     await redis.set(`user:${userId}:online`, 'true', 'EX', USER_TIMEOUT);
-    io.to(`user:${userId}`).emit('userStatus', { userId, status: 'online' });
+    status = 'online'
   } else if (!isOnline && currentStatus !== null) {
     await redis.del(`user:${userId}:online`);
-    io.to(`user:${userId}`).emit('userStatus', { userId, status: 'offline' });
+    status = 'offline'
   }
+  io.emit('userStatus', { userId, status });
 }
 
 // Socket connection handling
