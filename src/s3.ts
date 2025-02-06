@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import multer from 'multer';
 import multerS3 from 'multer-s3';
 
@@ -24,6 +24,15 @@ export async function uploadFileToS3(BUCKET_NAME: string, file: Buffer, fileName
   await s3Client.send(command);
 
   return `https://${params.Bucket}.s3.amazonaws.com/${params.Key}`;
+}
+
+export async function deleteFileFromS3(BUCKET_NAME: string, fileName: string) {
+  const input = {
+    Bucket: BUCKET_NAME,
+    Key: fileName
+  };
+  const command = new DeleteObjectCommand(input);
+  await s3Client.send(command);
 }
 
 const postUpload = multer({

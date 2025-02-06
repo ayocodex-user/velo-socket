@@ -8,7 +8,7 @@ import Redis from "ioredis";
 import { MongoClient, ObjectId, ServerApiVersion } from "mongodb";
 import type { ConvoType, ConvoType1, GroupMessageAttributes, MessageAttributes, NewChat_, Participant } from "./types";
 import { msgStatus } from './types';
-import { uploadFileToS3 } from './s3.js';
+import { deleteFileFromS3, uploadFileToS3 } from './s3.js';
 
 config()
 
@@ -159,13 +159,18 @@ io.on('connection', async (socket: UserSocket) => {
     const chatId = new ObjectId(id);
 
     if (data.updates.deleted){
+      (await client.db(MONGODB_DB).collection('chatMessages').
+      findOne({ $or: [{ _id: chatId }, { Oid: chatId }] }) as unknown as MessageAttributes)
+      .attachments.map(a => a.name).map(async (name) => {
+        await deleteFileFromS3('files-for-chat', name);
+      });
       if (data.updates.convo){
-        const result = await client.db(MONGODB_DB).collection('chats').deleteOne({ _id: chatId })
-        const result1 = await client.db(MONGODB_DB).collection('chatMessages').deleteMany({ chatId: chatId })
+         await client.db(MONGODB_DB).collection('chats').deleteOne({ _id: chatId })
+         await client.db(MONGODB_DB).collection('chatMessages').deleteMany({ chatId: chatId })
         // console.log(`Deleted ${result.deletedCount + result1.deletedCount} message(s)`); // Log the result of the deletion
         return;
       }
-      const result = await client.db(MONGODB_DB).collection('chatMessages').deleteOne({ $or: [{ _id: chatId }, { Oid: chatId}] })
+      await client.db(MONGODB_DB).collection('chatMessages').deleteOne({ $or: [{ _id: chatId }, { Oid: chatId}] })
       // console.log(`Deleted ${result.deletedCount} message(s)`); // Log the result of the deletion
       return;
     }
@@ -209,6 +214,7 @@ io.on('connection', async (socket: UserSocket) => {
               name: file.name,
               type: file.type,
               url: fileUrl, // Add the S3 URL to the attachment
+              size: Buffer.byteLength(fileBuffer)
             });
           } catch (error) {
             console.error('Error uploading file to S3:', error);
@@ -264,15 +270,15 @@ io.on('connection', async (socket: UserSocket) => {
       ...message,
     });
     if ('messageType' in data && data.messageType === 'Groups') {
-      io.to(`group:${data.receiverId}`).emit('newMessage', data);
+      io.to(`group:${data.receiverId}`).emit('newMessage', message);
       // console.log('messageType & Groups')
     } else {
       if ('senderId' in data) {
-        io.to(`user:${data.senderId}`).emit('newMessage', data);
+        io.to(`user:${data.senderId}`).emit('newMessage', message);
         // console.log('senderId')
       }
       if ('receiverId' in data && data.receiverId) {
-        io.to(`user:${data.receiverId}`).emit('newMessage', data);
+        io.to(`user:${data.receiverId}`).emit('newMessage', message);
         // console.log('receiverId')
       }
     }
