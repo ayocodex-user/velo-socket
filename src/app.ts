@@ -41,13 +41,16 @@ type UserSocket = Socket & { userId?: string };
 export const server = http.createServer(app);
 
 export const io = new Server(server, {
-  maxHttpBufferSize: 1e8,
+  maxHttpBufferSize: 6e7,
   path: '/wxyrt',
   transports: ['websocket', 'polling'],
   pingTimeout: 60000,
   pingInterval: 25000,
   cors: corsOptions,
-  cookie: true, // Added to access cookies
+  cookie: true,
+  perMessageDeflate: {
+    threshold: 1024, // Compress messages larger than 1 KB
+  }
 });
 
 
@@ -76,11 +79,11 @@ async function updateUserOnlineStatus(userId: string, isOnline: boolean) {
   const currentStatus = await redis.get(`user:${userId}:online`);
   let status;
   
-  if (isOnline && currentStatus !== 'true') {
-    await redis.set(`user:${userId}:online`, 'true', 'EX', USER_TIMEOUT);
+  if (isOnline) {
+    if (currentStatus !== 'true') await redis.set(`user:${userId}:online`, 'true', 'EX', USER_TIMEOUT);
     status = 'online'
-  } else if (!isOnline && currentStatus !== null) {
-    await redis.del(`user:${userId}:online`);
+  } else {
+    if (currentStatus !== null) await redis.del(`user:${userId}:online`);
     status = 'offline'
   }
   io.emit('userStatus', { userId, status });
