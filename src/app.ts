@@ -93,7 +93,7 @@ async function updateLastActive(userId: string) {
 // Socket connection handling
 io.on('connection', async (socket: UserSocket) => {
   // console.log('Connected to the socket ctrl');
-  const userId = socket.handshake.query.userId;
+  const userId = socket.handshake.query.userId as string;
   const BATCH_INTERVAL = 5000; // 5 seconds
   const statusUpdates = new Map();
 
@@ -118,7 +118,7 @@ io.on('connection', async (socket: UserSocket) => {
     console.log("Mongoconnection: You successfully connected to MongoDB!");
   }
 
-  socket.on('register', async (userId: string) => {
+  socket.on('register', async () => {
     // console.log('Connected to the socket ctrl:', userId);
     if (userId) {
       const isAlreadyConnected = await redis.sismember(ONLINE_USERS_KEY, userId);
@@ -127,7 +127,6 @@ io.on('connection', async (socket: UserSocket) => {
         await redis.sadd(ONLINE_USERS_KEY, userId);
         await updateUserOnlineStatus(userId, true);
       }
-      socket.userId = userId;
       socket.join(`user:${userId}`);
       socket.join(groups);
       // console.log(`User ${userId} joined group:${groups}`);
@@ -141,16 +140,16 @@ io.on('connection', async (socket: UserSocket) => {
   });
 
   const heartbeat = setInterval(async () => {
-    if (socket.userId) {
-      await updateUserOnlineStatus(socket.userId, true);
+    if (userId) {
+      await updateUserOnlineStatus(userId, true);
     }
   }, HEARTBEAT_INTERVAL);
 
   socket.on('disconnect', async () => {
     clearInterval(heartbeat);
-    if (socket.userId) {
-      await redis.srem(ONLINE_USERS_KEY, socket.userId);
-      await updateUserOnlineStatus(socket.userId, false);
+    if (userId) {
+      await redis.srem(ONLINE_USERS_KEY, userId);
+      await updateUserOnlineStatus(userId, false);
     }
     socket.removeAllListeners();
   });
@@ -162,13 +161,13 @@ io.on('connection', async (socket: UserSocket) => {
   socket.on('addChat', async (data: NewChat_) => {
     // console.log(data.chat.participants)
     const uniqueParticipants = Array.from(new Set(data.chat.participants.map(participant => `user:${participant.id}`)));
-    console.log(uniqueParticipants)
+    // console.log(uniqueParticipants)
     io.to(uniqueParticipants).emit('newChat', data);
   });
 
   socket.on('updateConversation', async (data: {id: string, updates: Partial<ConvoType1>}) => {
     const { id, updates } = data;
-    // console.log(data,socket.userId)
+    // console.log(data,userId)
     const chatId = new ObjectId(id);
 
     if (data.updates.deleted){
@@ -282,17 +281,13 @@ io.on('connection', async (socket: UserSocket) => {
     await client.db(MONGODB_DB).collection('chatMessages').insertOne({
       ...message,
     });
-    if ('messageType' in data && data.messageType === 'Groups') {
+    if (data.messageType === 'Groups') {
       io.to(`group:${data.receiverId}`).emit('newMessage', message);
       // console.log('messageType & Groups')
     } else {
       if ('senderId' in data) {
         io.to(`user:${data.senderId}`).emit('newMessage', message);
-        // console.log('senderId')
-      }
-      if ('receiverId' in data && data.receiverId) {
         io.to(`user:${data.receiverId}`).emit('newMessage', message);
-        // console.log('receiverId')
       }
     }
   });
@@ -322,7 +317,7 @@ io.on('connection', async (socket: UserSocket) => {
     if (!rooms.has(roomId)) {
       rooms.set(roomId, new Set());
     }
-    rooms.get(roomId).add(socket.userId);
+    rooms.get(roomId).add(userId);
 
     if (rooms.get(roomId).size === 2) {
       socket.to(roomId).emit('user-joined');
@@ -370,7 +365,7 @@ io.on('connection', async (socket: UserSocket) => {
   socket.on('joinChat', (data: { chatId: string }) => {
     const { chatId } = data;
     socket.join(`group:${chatId}`);
-    io.to(`group:${chatId}`).emit('groupAnnouncement', { chatId, userId: socket.userId });
+    io.to(`group:${chatId}`).emit('groupAnnouncement', { chatId, userId: userId });
   });
 });
 
