@@ -85,12 +85,14 @@ async function updateUserOnlineStatus(userId: string, isOnline: boolean) {
   } else {
     if (currentStatus !== null) await redis.del(`user:${userId}:online`);
     status = 'offline'
+    const lastActive = await redis.get(`user:${userId}:lastActive`)
+    io.emit('lastActive', { userId, lastActive })
   }
   io.emit('userStatus', { userId, status });
 }
 
 async function updateLastActive(userId: string) {
-  await redis.set(`user:${userId}:lastActive`, Date.now());
+  await redis.set(`user:${userId}:lastActive`, new Date().toISOString());
 }
 
 // Socket connection handling
@@ -296,11 +298,11 @@ io.on('connection', async (socket: UserSocket) => {
   });
 
   socket.on('typing', (data: { userId: string, to: string }) => {
-    io.to(`user:${data.to}`).emit('userTyping', data);
+    io.to(data.to).emit('userTyping', data);
   });
 
   socket.on('stopTyping', (data: { userId: string, to: string }) => {
-    io.to(`user:${data.to}`).emit('userStopTyping', data);
+    io.to(data.to).emit('userStopTyping', data);
   });
 
   socket.on('offer', (data) => {
