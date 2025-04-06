@@ -251,6 +251,59 @@ export interface ConvoType {
       [x: string]: boolean
     }
 }
+
+export enum Visibility {
+  Everyone = 'everyone',
+  Friends = 'friends',
+  None = 'none',
+}
+
+export enum CommentPermission {
+  Everyone = 'everyone',
+  Friends = 'friends',
+  None = 'none',
+}
+
+export interface BlogPost {
+  _id: ObjectId;
+  UserId: string;
+  DisplayPicture: string;
+  NameOfPoster: string;
+  Verified: boolean;
+  TimeOfPost: string;
+  Visibility: Visibility;
+  Caption: string;
+  Image: string[];
+  NoOfLikes: number;
+  Liked: boolean;
+  NoOfComment: number;
+  NoOfShares: number;
+  NoOfBookmarks: number;
+  Bookmarked: boolean;
+  Username: string;
+  PostID: string;
+  Code: string;
+  WhoCanComment: CommentPermission;
+  Shared: boolean;
+  Type: "blog" | "comment" | "repost" | "quote";
+  ParentId: string;
+  isDeleted: boolean;
+  deletedAt?: string;
+}
+
+export interface SharedBlogPost extends BlogPost {
+  OriginalPostId: string; // Reference to the original post
+}
+
+export interface Post {
+  post: BlogPost;
+  message: string;
+}
+
+export interface Comment {
+  comment: BlogPost;
+  message: string;
+}
 export interface ConvoType1 extends ConvoType {
     userId: string,
     convo: boolean
@@ -263,4 +316,10 @@ export type hook<P = any, Q = boolean, R = boolean> = {
 export const ConvoType: Partial<hook<Partial<ConvoType>>> = {
     payload: {},
     suspense: false
+};
+export type ReactionType = {
+    type: 'like' | 'bookmark' | 'unlike' | 'unbookmark';
+    key: 'NoOfLikes' | 'NoOfBookmarks';
+    value: 'inc' | 'dec',
+    postId: string;
 };
