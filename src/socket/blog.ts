@@ -11,8 +11,8 @@ io.on('connection', (socket) => {
         const db = await getMongoDb();
         const collection = db.collection('Users');
         const posts = db.collection('Posts');
-        const shares = db.collection('Posts(Shares)');
-        const comments = db.collection('Posts(Comments)');
+        const shares = db.collection('Posts_Shares');
+        const comments = db.collection('Posts_Comments');
         let PostsOrSharesOrComments;
     
         // Retrieve user and post data
@@ -84,9 +84,9 @@ io.on('connection', (socket) => {
         // Connect to MongoDB
         const db = await getMongoDb();
         const collection = db.collection('Users');
-        const shares = db.collection('Posts(Shares)');
+        const shares = db.collection('Posts_Shares');
         const posts = db.collection('Posts');
-        const comments = db.collection('Posts(Comments)');
+        const comments = db.collection('Posts_Comments');
         let PostsOrSharesOrComments;
     
         // Retrieve user and post data
@@ -127,7 +127,7 @@ io.on('connection', (socket) => {
         } else {
             if (data.type === "repost") {
                 // Check if the user has already reposted
-                const existingRepost = await shares.findOne({ PostID: data.post.OriginalPostId, userId: userId });
+                const existingRepost = await shares.findOne({ OriginalPostId: data.post.PostID, userId: userId, Type: "repost" });
                 if (existingRepost) {
                     return socket.to(`user:${userId}`).emit("react_to_post", {
                         message: "You have already reposted this post!",
@@ -148,7 +148,7 @@ io.on('connection', (socket) => {
                     Type: "repost",
                     PostID: "",
                     OriginalPostId: data.post.PostID,
-                    TimeOfRepost: new Date().toISOString(),
+                    TimeOfPost: new Date().toISOString(),
                 };
                 repost.PostID = repost._id.toString();
 
@@ -224,7 +224,7 @@ io.on('connection', (socket) => {
             const db = await getMongoDb();
             const collection = db.collection('Users');
             const post = db.collection('Posts');
-            const comments = db.collection('Posts(Comments)');
+            const comments = db.collection('Posts_Comments');
         
             // Retrieve user and post data
             const user = await collection.findOne({ _id: new ObjectId(userId.toString()) });
