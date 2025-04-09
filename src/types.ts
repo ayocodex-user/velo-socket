@@ -285,7 +285,7 @@ export interface BlogPost {
   Code: string;
   WhoCanComment: CommentPermission;
   Shared: boolean;
-  Type: "blog" | "comment" | "repost" | "quote";
+  Type: "post" | "comment" | "repost" | "quote";
   ParentId: string;
   isDeleted: boolean;
   deletedAt?: string;

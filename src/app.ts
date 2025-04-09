@@ -135,7 +135,7 @@ io.on('connection', async (socket: UserSocket) => {
 
 // Handle connection errors
 io.engine.on("connection_error", (err) => {
-  console.error('Connection error:', err);
+  // console.error('Connection error:', err);
   console.log('Error details:', JSON.stringify(err, null, 2)); // Log detailed error
 });
 
