@@ -19,7 +19,7 @@ io.on('connection', (socket) => {
         const user = await collection.findOne({ _id: new ObjectId(userId.toString()) });
     
         if (!user) {
-            return socket.to(`user:${userId}`).emit("react_to_post", { message: `You're not allowed to ${data.type} this post!`, success: false, postId: data.postId, reaction: data.type });
+            return socket.to(`user:${userId}`).emit("post_reaction_reponse", { message: `You're not allowed to ${data.type} this post!`, success: false, postId: data.postId, reaction: data.type });
         }
         // Check if the post exists in the posts collection
         let post = await posts.findOne({ PostID: data.postId });
@@ -38,40 +38,62 @@ io.on('connection', (socket) => {
         }
 
         if (!post) {
-            return socket.to(`user:${userId}`).emit("react_to_post", { message: "Blog is not available!", success: false, postId: data.postId, reaction: data.type });
+            return socket.to(`user:${userId}`).emit("post_reaction_reponse", { message: "Blog is not available!", success: false, postId: data.postId, reaction: data.type });
         }
 
-        if (!data.type) return socket.to(`user:${userId}`).emit("react_to_post", { message: "This is an invalid reaction!", success: false, postId: data.postId, reaction: data.type });
+        if (!data.type) return socket.to(`user:${userId}`).emit("post_reaction_reponse", { message: "This is an invalid reaction!", success: false, postId: data.postId, reaction: data.type });
 
-        const currentCollection = data.type.includes('like') ? db.collection('Posts(Likes)') : db.collection('Posts(Bookmarks)');
+        const currentCollection = data.type.includes('like') ? db.collection('Posts_Likes') : db.collection('Posts_Bookmarks');
+        
+        const existingReaction = await currentCollection.findOne({ postId: data.postId, userId: userId });
+
         if(data.type.includes('un')){
+            // Check if the user has already reacted to the post
+            if (!existingReaction) {
+                return socket.to(`user:${userId}`).emit("post_reaction_reponse", {
+                    message: `You have not ${data.type} this post!`,
+                    success: false,
+                    postId: data.postId,
+                    reaction: data.type,
+                });
+            }
+            // Remove the reaction
             await currentCollection.deleteOne({ postId: data.postId, userId: userId })
 
-            // expected result of line 38 
-            // if data.type is like -> { $inc: { [`NoOfLikes`]: -1 } }
+            
             await PostsOrSharesOrComments.updateOne(
                 { PostID: data.postId }, 
-                { $inc: { [data.key]: -1 } }
+                { $inc: { [data.key]: -1 } } // if data.type is like -> { $inc: { [`NoOfLikes`]: -1 } }
             );
         } else {
+            // Check if the user has already reacted to the post
+            if (existingReaction) {
+                return socket.to(`user:${userId}`).emit("post_reaction_reponse", {
+                    message: `You have already ${data.type} this post!`,
+                    success: false,
+                    postId: data.postId,
+                    reaction: data.type,
+                });
+            }
+            // Add the reaction
             await currentCollection.insertOne({ postId: data.postId, userId: userId })
 
-            // expected result of line 47 
-            // if data.type is like -> { $inc: { [`NoOfLikes`]: 1 } }
+            
             await PostsOrSharesOrComments.updateOne(
                 { PostID: data.postId }, 
-                { $inc: { [data.key]: 1 } }
+                { $inc: { [data.key]: 1 } } // if data.type is like -> { $inc: { [`NoOfLikes`]: 1 } }
             );
         }
 
-        socket.to(`user:${userId}`).emit("react_to_post", { message: "Reaction added successfully!", success: true, reaction: data.type });
+        socket.to(`user:${userId}`).emit("post_reaction_reponse", { message: "Reaction added successfully!", success: true, reaction: data.type });
         
         socket.emit("updatePost", { 
-            excludeUser: userId, 
+            excludeUser: userId,
+            postId: post.PostID,  
             update: {
-                id: data.postId,
                 [data.key]: data.value === 'inc' ? post[data.key] + 1 : post[data.key] - 1
-            }
+            },
+            type: data.type
         })
 
     })
@@ -93,7 +115,7 @@ io.on('connection', (socket) => {
         const user = await collection.findOne({ _id: new ObjectId(userId.toString()) });
     
         if (!user) {
-            return socket.to(`user:${userId}`).emit("react_to_post", { message: `You're not allowed to ${data.type} this post!`, success: false, postId: data.post.PostID, reaction: data.type });
+            return socket.to(`user:${userId}`).emit("post_reaction_reponse", { message: `You're not allowed to ${data.type} this post!`, success: false, postId: data.post.PostID, reaction: data.type });
         }
         // Check if the post exists in the posts collection
         let post = await posts.findOne({ PostID: data.post.OriginalPostId });
@@ -112,24 +134,39 @@ io.on('connection', (socket) => {
         }
 
         if (!post) {
-            return socket.to(`user:${userId}`).emit("react_to_post", { message: "Post is not available!", success: false, postId: data.post.PostID, reaction: data.action });
+            return socket.to(`user:${userId}`).emit("post_reaction_reponse", { message: "Post is not available!", success: false, postId: data.post.PostID, reaction: data.action });
         }
 
-        if (!data.action) return socket.to(`user:${userId}`).emit("react_to_post", { message: "This is an invalid reaction!", success: false, postId: data.post.PostID, reaction: data.action });
+        if (!data.action) return socket.to(`user:${userId}`).emit("post_reaction_reponse", { message: "This is an invalid reaction!", success: false, postId: data.post.PostID, reaction: data.action });
 
+        // Check if the user has already reposted
+        const existingRepost = await shares.findOne({ OriginalPostId: data.post.PostID, userId: userId, Type: "repost" });
+        
         if(data.action === 'unshare'){
-            await shares.deleteOne({ PostID: data.post.OriginalPostId, userId: userId })
+            if (!existingRepost) {
+                return socket.to(`user:${userId}`).emit("post_reaction_reponse", {
+                    message: "You have not reposted this post!",
+                    success: false,
+                    postId: data.post.PostID,
+                    reaction: data.action,
+                });
+            }
+            await shares.deleteOne({ OriginalPostId: data.post.OriginalPostId, userId: userId, Type: "repost" })
 
             await PostsOrSharesOrComments.updateOne(
                 { PostID: data.post.OriginalPostId }, 
                 { $inc: { NoOfShares: -1 } }
             );
+
+            socket.emit("deletePost", { 
+                excludeUserId: userId,
+                postId: post.PostID,
+                type: data.action
+            })
         } else {
             if (data.type === "repost") {
-                // Check if the user has already reposted
-                const existingRepost = await shares.findOne({ OriginalPostId: data.post.PostID, userId: userId, Type: "repost" });
                 if (existingRepost) {
-                    return socket.to(`user:${userId}`).emit("react_to_post", {
+                    return socket.to(`user:${userId}`).emit("post_reaction_reponse", {
                         message: "You have already reposted this post!",
                         success: false,
                         postId: data.post.PostID,
@@ -157,6 +194,15 @@ io.on('connection', (socket) => {
                     { PostID: data.post.PostID },
                     { $inc: { NoOfShares: 1 } }
                 );
+        
+                socket.emit("updatePost", { 
+                    excludeUserId: userId,
+                    postId: data.post.PostID, 
+                    update: {
+                        NoOfShares: data.action === 'share' ? post.NoOfShares + 1 : post.NoOfShares - 1
+                    },
+                    type: data.action 
+                })
     
                 socket.emit("newPost", {
                     excludeUser: userId,
@@ -197,6 +243,15 @@ io.on('connection', (socket) => {
                     { PostID: data.post.OriginalPostId },
                     { $inc: { NoOfShares: 1 } }
                 );
+        
+                socket.emit("updatePost", { 
+                    excludeUserId: userId,
+                    postId: data.post.OriginalPostId, 
+                    update: {
+                        NoOfShares: data.action === 'share' ? post.NoOfShares + 1 : post.NoOfShares - 1
+                    },
+                    type: data.action 
+                })
     
                 socket.emit("newPost", {
                     excludeUser: userId,
@@ -205,19 +260,11 @@ io.on('connection', (socket) => {
             }
         }
 
-        socket.to(`user:${userId}`).emit("react_to_post", { message: `Post ${data.action}d successfully!`, success: true, reaction: data.action });
-        
-        socket.emit("updatePost", { 
-            excludeUser: userId, 
-            update: {
-                id: post.PostID,
-                NoOfShares: data.action === 'share' ? post.NoOfShares + 1 : post.NoOfShares - 1
-            } 
-        })
+        socket.to(`user:${userId}`).emit("post_reaction_reponse", { message: `Post ${data.action}d successfully!`, success: true, reaction: data.action });
 
     })
 
-    socket.on('blog', async (data: BlogPost) => {
+    socket.on('post', async (data: BlogPost) => {
         try {
 
             // Connect to MongoDB

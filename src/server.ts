@@ -4,7 +4,8 @@ import http from 'http';
 
 export const app = express();
 
-export const server = http.createServer(app);const whitelist = [process.env.ALLOWED_URL, process.env.ALLOWED_URL_1, 'https://localhost:3000'];
+export const server = http.createServer(app);
+const whitelist = [process.env.ALLOWED_URL, process.env.ALLOWED_URL_1];
 
 export const corsOptions = {
   origin: function (origin: any, callback: (arg0: Error | null, arg1: boolean | undefined) => void) {
