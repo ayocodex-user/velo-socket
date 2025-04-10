@@ -17,6 +17,7 @@ export const io = new Server(server, {
 });
 
 export type UserSocket = Socket & { userId?: string; };
+
 io.use(async (socket: UserSocket, next) => {
   const token = socket.handshake.query.userId;
   if (!token) {

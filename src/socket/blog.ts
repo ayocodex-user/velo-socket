@@ -288,7 +288,7 @@ io.on('connection', (socket) => {
                 DisplayPicture: user.displayPicture || '',
                 NameOfPoster: `${user.firstname ?? ''} ${user.lastname ?? ''}`.trim(),
                 Verified: user.Verified ?? false,
-                TimeOfPost: new Date().toISOString(),
+                TimeOfPost: data.TimeOfPost ?? new Date().toISOString(),
                 Visibility: data.Visibility,
                 Caption: data.Caption ?? '',
                 Image: data.Image ?? [],
