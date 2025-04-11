@@ -123,13 +123,13 @@ io.on('connection', async (socket: UserSocket) => {
   socket.on('subscribeToUser', async (userId: string) => {
     socket.join(`user:${userId}`);
     const isOnline = await redis.get(`user:${userId}:online`);
-    socket.emit('userStatus', { userId, status: isOnline ? 'online' : 'offline' });
+    io.emit('userStatus', { userId, status: isOnline ? 'online' : 'offline' });
   });
 
   socket.on('getRoomMembers', (chatId: string) => {
     const room = io.sockets.adapter.rooms.get(chatId);
     const members = room ? Array.from(room) : [];
-    socket.emit('roomMembers', { chatId, members });
+    io.emit('roomMembers', { chatId, members });
   });
 });
 
