@@ -160,10 +160,10 @@ io.on('connection', (socket) => {
                         reaction: data.action,
                     });
                 }
-                await shares.deleteOne({ OriginalPostId: data.post.OriginalPostId, userId: userId, Type: "repost" })
+                await shares.deleteOne({ OriginalPostId: data.post.PostID, userId: userId, Type: "repost" })
 
                 await PostsOrSharesOrComments.updateOne(
-                    { PostID: data.post.OriginalPostId }, 
+                    { PostID: data.post.PostID }, 
                     { $inc: { NoOfShares: -1 } }
                 );
 
@@ -322,8 +322,15 @@ io.on('connection', (socket) => {
                 isDeleted: false
             };
             blog.PostID = blog._id.toString();
+            console.log(data)
         
             if(blog.Type === 'comment') {
+                if (!data.ParentId) {
+                    return socket.to(`user:${userId}`).emit("post_response", { 
+                        message: "ParentId is needed!", 
+                        success: false 
+                    });
+                }
                 // Check if the post exists in the posts collection
                 let post = await posts.findOne({ PostID: data.ParentId });
                 PostsOrSharesOrComments = posts;
@@ -358,7 +365,7 @@ io.on('connection', (socket) => {
                     excludeUserId: userId,
                     postId: blog.ParentId, 
                     update: {
-                        NoOfComments: post.NoOfComments + 1
+                        NoOfComment: post.NoOfComment + 1
                     },
                     type: blog.Type 
                 })
@@ -386,6 +393,13 @@ io.on('connection', (socket) => {
     socket.on('deletePost', async (data: { postId: string }) => {
 
         try {
+            if (!data.postId) {
+                return socket.to(`user:${userId}`).emit("delete_post_response", { 
+                    message: "PostId is needed!", 
+                    success: false 
+                });
+            }
+
             // Connect to MongoDB
             const db = await getMongoDb();
             const posts = db.collection('Posts');
