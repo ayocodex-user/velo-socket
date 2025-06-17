@@ -7,6 +7,7 @@ import { updateUserOnlineStatus, updateLastActive, fetchUserGroups } from './uti
 import { getMongoDb } from './mongodb.js';
 import './socket/chats.js'
 import './socket/blog.js'
+import './socket/follow.js'
 import { io, UserSocket } from './socket.js';
 import { app, corsOptions, server } from './server.js';
 

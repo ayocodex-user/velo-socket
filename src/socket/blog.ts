@@ -191,6 +191,7 @@ io.on('connection', (socket) => {
                         NameOfPoster: `${user.firstname ?? ""} ${user.lastname ?? ""}`.trim(),
                         Verified: user.Verified ?? false,
                         Username: user.username || "",
+                        IsFollowing: false,
                         Type: "repost",
                         PostID: "",
                         OriginalPostId: data.post.PostID,
@@ -230,6 +231,7 @@ io.on('connection', (socket) => {
                         Visibility: data.post.Visibility,
                         Caption: data.post.Caption ?? "", // Include user's caption
                         Image: data.post.Image ?? [],
+                        IsFollowing: false,
                         NoOfLikes: 0,
                         Liked: false,
                         NoOfComment: 0,
@@ -242,7 +244,6 @@ io.on('connection', (socket) => {
                         WhoCanComment: data.post.WhoCanComment,
                         Type: "quote",
                         PostID: "",
-                        isDeleted: false,
                         OriginalPostId: data.post.OriginalPostId,
                     };
                     quote.PostID = quote._id.toString();
@@ -307,6 +308,7 @@ io.on('connection', (socket) => {
                 Visibility: data.Visibility,
                 Caption: data.Caption ?? '',
                 Image: data.Image ?? [],
+                IsFollowing: false,
                 NoOfLikes: 0,
                 Liked: false,
                 NoOfComment: 0,
@@ -319,10 +321,9 @@ io.on('connection', (socket) => {
                 WhoCanComment: data.WhoCanComment,
                 Type: data.Type,
                 PostID: "",
-                isDeleted: false
             };
             blog.PostID = blog._id.toString();
-            console.log(data)
+            // console.log(data)
         
             if(blog.Type === 'comment') {
                 if (!data.ParentId) {
@@ -371,7 +372,7 @@ io.on('connection', (socket) => {
                 })
             } else {
                 await posts.insertOne(blog)
-
+                
                 io.emit("newPost", { 
                     excludeUser: userId, 
                     blog: blog 
