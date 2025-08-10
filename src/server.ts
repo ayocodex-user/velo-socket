@@ -2,9 +2,12 @@ import { config } from 'dotenv';
 config()
 import express from 'express';
 import http from 'http';
+import { join } from 'path';
 
 
 export const app = express();
+
+app.use(express.static(join('../', 'public')));
 
 export const server = http.createServer(app);
 const whitelist = [process.env.ALLOWED_URL, process.env.ALLOWED_URL_1];

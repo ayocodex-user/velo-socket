@@ -7,6 +7,7 @@ import { updateUserOnlineStatus, updateLastActive, fetchUserGroups } from './uti
 import { getMongoDb } from './mongodb.js';
 import './socket/chats.js'
 import './socket/blog.js'
+import './socket/follow.js'
 import { io, UserSocket } from './socket.js';
 import { app, corsOptions, server } from './server.js';
 
@@ -75,13 +76,13 @@ io.on('connection', async (socket: UserSocket) => {
   socket.on('offer', (data) => {
     const { room, offer } = data;
     socket.to(`group:${room}`).emit('offer', {offer, room});
-    console.log('offer: ' + data)
+  // console.log('offer: ' + data)
   });
 
   socket.on('callOffer', (data) => {
     const { room, offer } = data;
     socket.to(`group:${room}`).emit('offer', {offer, room});
-    console.log('callOffer: ' + data)
+  // console.log('callOffer: ' + data)
   });
 
   socket.on('join-room', async (roomId) => {
@@ -93,27 +94,29 @@ io.on('connection', async (socket: UserSocket) => {
       socket.to(roomId).emit('user-joined');
     }
 
-    console.log(`User ${socket.id} joined room ${roomId}`);
+  // console.log(`User ${socket.id} joined room ${roomId}`);
   });
 
   socket.on('hangup', (room) => {
     socket.to(`group:${room}`).emit('remote-hangup', room)
   })
 
-  socket.on('user-joined', (room) => {
+  socket.on('user-joined', (payload) => {
+    const room = typeof payload === 'string' ? payload : (payload && payload.room);
+    if (!room) return;
     socket.to(`group:${room}`).emit('user-joined', room)
   })
 
   socket.on('answer', (data) => {
     const { room, answer } = data;
     socket.to(`group:${room}`).emit('answer', answer);
-    console.log('answer: ' + data)
+  // console.log('answer: ' + data)
   });
 
   socket.on('candidate', (data) => {
     const { room, candidate } = data;
     socket.to(`group:${room}`).emit('candidate', candidate);
-    console.log('candidate: ' + data)
+  // console.log('candidate: ' + data)
   });
 
   socket.on('error', (error) => {
@@ -140,17 +143,17 @@ io.engine.on("connection_error", (err) => {
 });
 
 // Basic routes
-app.get("/", (req, res) => {
+app.get("/", (_, res) => {
   console.log('Hi');
   res.status(200).json("Hello World!");
 });
 
-app.get("/socket", (req, res) => {
+app.get("/socket", (_, res) => {
   res.status(202).json({ message: 'Success' });
 });
 
-app.get("*", (req, res) => {
-  res.sendFile(join(__dirname, '/404.html'))
+app.get("*", (_, res) => {
+  res.status(404).sendFile(join(__dirname.replace('src', 'public'), '/404.html'));
 })
 
 // Start the server
