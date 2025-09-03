@@ -1,7 +1,7 @@
 import { config } from 'dotenv';
 config()
 import { Db, MongoClient, ServerApiVersion } from 'mongodb';
-import { ChatData, ChatParticipant, ChatSettings, FollowersSchema, MessageAttributes, PostSchema, Reaction, ReadReceipt, TokensSchema, UserSchema, VideoSchema } from './types';
+import { ChatData, ChatParticipant, ChatSettings, FollowersSchema, MessageAttributes, PostSchema, Reaction, ReadReceipt, TokensSchema, UserSchema, UserSettings, VideoSchema } from './types';
 
 const uri = process.env.MONGOLINK || '';
 
@@ -214,7 +214,7 @@ export class MongoDBClient {
    * @returns Collection for storing user preferences
    */
   userSettings() {
-    return this.db.collection('User_Settings');
+    return this.db.collection<UserSettings>('User_Settings');
   }
 
   /**

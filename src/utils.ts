@@ -1,6 +1,6 @@
 import { ObjectId } from 'mongodb';
 import { io } from './socket.js';
-import { getMongoDb } from './mongodb.js';
+import { getMongoDb, MongoDBClient } from './mongodb.js';
 import Redis from 'ioredis';
 
 export function timeFormatter(){
@@ -34,10 +34,16 @@ export async function updateUserOnlineStatus(userId: string, isOnline: boolean, 
 
 export async function updateLastActive(userId: string, redis: Redis) {
   await redis.set(`user:${userId}:lastActive`, new Date().toISOString());
-}export const fetchUserGroups = async (userId: string): Promise<any[]> => {
-  return await (await getMongoDb()).collection('chats').find({
-    'participants.id': userId,
-    // 'chatType': 'Groups'
-  }).toArray();
+}
+
+export const fetchUserGroups = async (userId: string) => {
+  const db = await new MongoDBClient().init();
+  const participantList = await db.chatParticipants().find({ userId: userId, chatType: 'Groups' }).toArray();
+  const chatIds = participantList.map(chat => chat.chatId);
+  
+  return db.chats().find({ _id: { $in: chatIds.map(id => new ObjectId(id)) } }).toArray();
 };
 
+export async function updateReadReceipts(userId: string, redis: Redis) {
+  await redis.set(`user:${userId}:readReceipts`, new Date().toISOString());
+}

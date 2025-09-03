@@ -7,6 +7,10 @@ import { join } from 'path';
 
 export const app = express();
 
+// Middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
 app.use(express.static(join('../', 'public')));
 
 export const server = http.createServer(app);
