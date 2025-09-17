@@ -24,48 +24,58 @@ export interface Reaction{
 export type ChatType = 'Personal' | 'DMs' | 'Groups' | 'Channels';
 
 export interface UserSchema {
-    _id?: ObjectId,
-    time: string,
-    userId: string,
-    firstname: string,
-    lastname: string,
-    email: string,
-    username: string,
-    password: string,
-    displayPicture?: string,
-    isEmailConfirmed?: boolean,
-    confirmationToken?: string,
-    signUpCount?: number,
-    lastLogin?: string,
-    loginToken?: string,
-    lastResetAttempt?: {
-      [x: string]: string
-    },
-    providers: {
-        [x: string]: {
-            id: string | undefined;
-            lastUsed: string;
-        };
-    },
-    resetAttempts?: number,
-    password_reset_time?: string,
-    theme?: string,
-    verified?: boolean,
-    followers?: number,
-    following?: number,
-    isFollowing?: boolean,
-    isPrivate?: boolean,
-    bio?: string,
-    coverPhoto?: string,
-    dob?: string,
-    lastUpdate?: string[],
-    location?: string,
-    noOfUpdates?: number,
-    website?: string,
-    resetToken?: string,
-    resetTokenExpiry?: number,
-    name?: string
+  _id?: ObjectId | string | undefined,
+  bio?: string,
+  confirmationToken?: string,
+  coverPhoto?: string,
+  dob?: string,
+  displayPicture?: string,
+  email?: string,
+  firstname: string,
+  followers?: number,
+  following?: number,
+  isEmailConfirmed?: boolean,
+  isFollowing?: boolean,
+  isPrivate?: boolean,
+  lastLogin?: string,
+  lastname?: string,
+  lastResetAttempt?: {
+    [x: string]: string
+  },
+  lastSeen?: string,
+  lastUpdate?: string[],
+  location?: string,
+  loginToken?: string,
+  name: string,
+  noOfUpdates?: number,
+  password: string,
+  password_reset_time?: string,
+  providers: {
+      [x: string]: {
+          id: string | undefined;
+          lastUsed: string;
+      };
+  },
+  resetAttempts?: number,
+  resetToken?: string,
+  resetTokenExpiry?: number,
+  signUpCount?: number,
+  theme?: string,
+  time: string,
+  userId: string,
+  username: string,
+  verified?: boolean,
+  website?: string
 };
+
+export interface UserSettings {
+  twoFactorAuth: boolean;
+  loginAlerts: boolean;
+  showOnlineStatus: boolean;
+  showLastSeen: boolean;
+  showReadReceipts: boolean;
+  showTypingStatus: boolean;
+}
 
 export interface FollowersSchema {
   followerId: string,
@@ -242,6 +252,7 @@ export interface MessageAttributes {
   _id?: ObjectId;
   chatId: string; // Reference to the chat in Chats collection
   senderId: string;
+  sender?: { id: string; name: string; displayPicture: string; username: string; verified: boolean };
   receiverId: string;
   content: string;
   timestamp: string;

@@ -1,6 +1,6 @@
 import { ObjectId, WithId } from "mongodb";
 import { deleteFileFromS3, uploadFileToS3 } from "../s3.js";
-import { ChatParticipant, ChatSettings, ConvoType1, GroupMessageAttributes, MessageAttributes, msgStatus, NewChat_, Participant, Reaction } from "../types.js";
+import { ChatParticipant, ChatSettings, ConvoType1, GroupMessageAttributes, MessageAttributes, msgStatus, NewChat_, Participant, Reaction, UserSchema } from "../types.js";
 import { MongoDBClient } from "../mongodb.js";
 import { io, UserSocket } from '../socket.js';
 
@@ -20,7 +20,7 @@ io.on('connection', async (socket: UserSocket) => {
       db = await new MongoDBClient().init();
     } catch (error) {
       console.error('Failed to initialize database connection:', error);
-      socket.emit('chatError', { error: 'Database connection failed' });
+      io.to(`user:${userId}`).emit('chatError', { error: 'Database connection failed' });
       socket.disconnect();
       return;
     }
@@ -74,7 +74,7 @@ io.on('connection', async (socket: UserSocket) => {
         }
       } catch (error) {
         console.error('Error in addReaction:', error);
-        socket.emit('chatError', { error: 'Failed to process reaction' });
+        io.to(`user:${data.userId}`).emit('chatError', { error: 'Failed to process reaction' });
       }
     });
 
@@ -170,15 +170,16 @@ io.on('connection', async (socket: UserSocket) => {
     });
 
     socket.on('chatMessage', async (data: MessageAttributes & { participants?: ChatParticipant[] }) => {
+      const senderId = data.senderId || data.sender?.id;
       try {
         // console.log('Message')
         // console.log(data)
-        console.log(`Processing chat message from ${data.senderId} to ${data.receiverId} in chat ${data.chatId}`);
+        console.log(`Processing chat message from ${senderId} to ${data.receiverId} in chat ${data.chatId}`);
 
         // Validate required data
-        if (!data.chatId || !data.senderId || !data.receiverId) {
-          console.error('chatMessage: Missing required fields', { chatId: data.chatId, senderId: data.senderId, receiverId: data.receiverId });
-          socket.emit('chatError', { error: 'Missing required fields' });
+        if (!data.chatId || !senderId || !data.receiverId) {
+          console.error('chatMessage: Missing required fields', { chatId: data.chatId, senderId: senderId, receiverId: data.receiverId });
+          io.to(`user:${senderId}`).emit('chatError', { error: 'Missing required fields' });
           return;
         }
 
@@ -213,14 +214,15 @@ io.on('connection', async (socket: UserSocket) => {
         messageId = new ObjectId(data._id as unknown as string);
       } catch (error) {
         console.error('Invalid message ID format:', data._id);
-        socket.emit('chatError', { error: 'Invalid message ID format' });
+        io.to(`user:${senderId}`).emit('chatError', { error: 'Invalid message ID format' });
         return;
       }
 
       const message: MessageAttributes = {
         _id: messageId,
         chatId: data.chatId, // Reference to the chat in DMs collection
-        senderId: data.senderId,
+        senderId: senderId,
+        sender: data.sender,
         receiverId: data.receiverId,
         content: data.content,
         timestamp: data.timestamp ? new Date(data.timestamp).toISOString() : new Date().toISOString(),
@@ -363,7 +365,7 @@ io.on('connection', async (socket: UserSocket) => {
         });
       } catch (error) {
         console.error('Error inserting chat message:', error);
-        socket.emit('chatError', { error: 'Failed to save message' });
+        io.to(`user:${senderId}`).emit('chatError', { error: 'Failed to save message' });
         return;
       }
 
@@ -373,7 +375,7 @@ io.on('connection', async (socket: UserSocket) => {
           acc[participant.userId] = false;
           return acc;
         }, {} as { [key: string]: boolean });
-        message.isRead[message.senderId] = true;
+        message.isRead[senderId] = true;
 
         // Only insert read receipts if we have participants
         try {
@@ -392,7 +394,7 @@ io.on('connection', async (socket: UserSocket) => {
         }
       } else {
         // Initialize isRead with just the sender if no participants
-        message.isRead = { [message.senderId]: true };
+        message.isRead = { [senderId]: true };
       }
 
       if (data.messageType === 'Groups') {
@@ -404,7 +406,7 @@ io.on('connection', async (socket: UserSocket) => {
         }
       } else {
         try {
-          io.to(`user:${data.senderId}`).emit('newMessage', message);
+          io.to(`user:${senderId}`).emit('newMessage', message);
           io.to(`user:${data.receiverId}`).emit('newMessage', message);
         } catch (error) {
           console.error('Error emitting direct message:', error);
@@ -412,11 +414,11 @@ io.on('connection', async (socket: UserSocket) => {
       }
     } catch (error) {
       console.error('Error in chatMessage handler:', error);
-      socket.emit('chatError', { error: 'Failed to process chat message' });
+      io.to(`user:${senderId}`).emit('chatError', { error: 'Failed to process chat message' });
     }
   });
 
-    socket.on('typing', (data: { userId: string, to: string }) => {
+    socket.on('typing', (data: { user: Partial<UserSchema>, to: string }) => {
       try {
         io.to(data.to).emit('userTyping', data);
       } catch (error) {
@@ -424,7 +426,7 @@ io.on('connection', async (socket: UserSocket) => {
       }
     });
 
-    socket.on('stopTyping', (data: { userId: string, to: string }) => {
+    socket.on('stopTyping', (data: { user: Partial<UserSchema>, to: string }) => {
       try {
         io.to(data.to).emit('userStopTyping', data);
       } catch (error) {
