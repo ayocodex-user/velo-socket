@@ -14,7 +14,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(join('../', 'public')));
 
 export const server = http.createServer(app);
-const whitelist = [process.env.ALLOWED_URL, process.env.ALLOWED_URL_1];
+const whitelist = [process.env.ALLOWED_URL, process.env.ALLOWED_URL_1, process.env.ALLOWED_URL_2];
 
 export const corsOptions = {
   origin: function (origin: any, callback: (arg0: Error | null, arg1: boolean | undefined) => void) {

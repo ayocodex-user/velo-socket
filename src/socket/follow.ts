@@ -1,5 +1,6 @@
 import { io } from '../socket.js';
 import { redis } from '../app.js';
+import { ONLINE_USERS_KEY } from '../utils.js';
 
 io.on('connection', async (socket) => {
     const userId = socket.handshake.query.userId as string;
@@ -18,7 +19,7 @@ io.on('connection', async (socket) => {
             });
 
             // Update online users list if needed
-            const isOnline = await redis.get(`user:${followerDetails._id}:online`);
+            const isOnline = Boolean(await redis.sismember(ONLINE_USERS_KEY, followerDetails._id));
             if (isOnline) {
                 io.emit('userStatus', { userId: followerDetails._id?.toString(), status: 'online' });
             }

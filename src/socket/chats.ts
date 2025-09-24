@@ -3,6 +3,7 @@ import { deleteFileFromS3, uploadFileToS3 } from "../s3.js";
 import { ChatParticipant, ChatSettings, ConvoType1, GroupMessageAttributes, MessageAttributes, msgStatus, NewChat_, Participant, Reaction, UserSchema } from "../types.js";
 import { MongoDBClient } from "../mongodb.js";
 import { io, UserSocket } from '../socket.js';
+import { offlineMessageManager } from '../offline-messages.js';
 
 io.on('connection', async (socket: UserSocket) => {
   try {
@@ -32,9 +33,19 @@ io.on('connection', async (socket: UserSocket) => {
     socket.on('addChat', async (data: NewChat_) => {
       // console.log(data.chat.participants)
       if (data.chat && data.chat.participants && data.chat.participants.length > 0) {
-        const uniqueParticipants = Array.from(new Set(data.chat.participants.map(participant => `user:${participant.userId}`)));
-        // console.log(uniqueParticipants)
-        io.to(uniqueParticipants).emit('newChat', data);
+        const participantUserIds = Array.from(new Set(data.chat.participants.map(participant => participant.userId)));
+        const rooms = participantUserIds.map(id => `user:${id}`);
+        // Live emit to currently online participants
+        io.to(rooms).emit('newChat', data);
+        // Queue for offline participants
+        for (const id of participantUserIds) {
+          if (id !== userId) {
+            await offlineMessageManager.broadcastMessage({
+              type: 'newChat',
+              data
+            }, undefined, [id]);
+          }
+        }
       } else {
         console.warn('addChat: No participants found in chat data');
       }
@@ -42,9 +53,15 @@ io.on('connection', async (socket: UserSocket) => {
 
     socket.on('addReaction', async (data: Reaction) => {
       try {
+        const message = await db.chatMessages().findOne({ _id: new ObjectId(data.messageId) });
+        if (!message) {
+          io.to(`user:${data.userId}`).emit('chatError', { error: 'Message not found' });
+          return;
+        }
+        console.log(message);
         // Check if user already reacted
         const existingReaction = await db.chatReactions().findOne({
-          messageId: data.messageId,
+          messageId: message._id.toString(),
           userId: data.userId
         });
 
@@ -52,25 +69,64 @@ io.on('connection', async (socket: UserSocket) => {
           // If same reaction, remove it
           if (existingReaction.reaction === data.reaction) {
             await db.chatReactions().deleteOne({
-              messageId: data.messageId,
+              messageId: message._id.toString(),
               userId: data.userId
             });
-            io.to(`user:${data.userId}`).emit('reactionRemoved', data);
+            if (message.messageType === 'Groups') {
+              io.to(`group:${message.chatId}`).emit('reactionRemoved', data);
+              const participants = await db.chatParticipants().find({ chatId: message.chatId }).toArray();
+              for (const p of participants) {
+                await offlineMessageManager.broadcastMessage({ type: 'reactionRemoved', data }, undefined, [p.userId]);
+              }
+            } else {
+              io.to([`user:${message.senderId}`,`user:${message.receiverId}`]).emit('reactionRemoved', data);
+              const targets = Array.from(new Set([message.senderId, message.receiverId]));
+              for (const id of targets) {
+                await offlineMessageManager.broadcastMessage({ type: 'reactionRemoved', data }, undefined, [id]);
+              }
+            }
           } else {
             // If different reaction, update it
             await db.chatReactions().updateOne(
               {
-                messageId: data.messageId,
+                messageId: message._id.toString(),
                 userId: data.userId
               },
               { $set: { reaction: data.reaction } }
             );
-            io.to(`user:${data.userId}`).emit('reactionUpdated', data);
+            if (message.messageType === 'Groups') {
+              io.to(`group:${message.chatId}`).emit('reactionUpdated', data);
+              const participants = await db.chatParticipants().find({ chatId: message.chatId }).toArray();
+              for (const p of participants) {
+                await offlineMessageManager.broadcastMessage({ type: 'reactionUpdated', data }, undefined, [p.userId]);
+              }
+            } else {
+              io.to([`user:${message.senderId}`,`user:${message.receiverId}`]).emit('reactionUpdated', data);
+              const targets = Array.from(new Set([message.senderId, message.receiverId]));
+              for (const id of targets) {
+                await offlineMessageManager.broadcastMessage({ type: 'reactionUpdated', data }, undefined, [id]);
+              }
+            }
           }
         } else {
           // No existing reaction, insert new one
-          await db.chatReactions().insertOne(data);
-          io.to(`user:${data.userId}`).emit('reactionAdded', data);
+          await db.chatReactions().insertOne({
+            ...data,
+            messageId: message._id.toString()
+          });
+          if (message.messageType === 'Groups') {
+            io.to(`group:${message.chatId}`).emit('reactionAdded', data);
+            const participants = await db.chatParticipants().find({ chatId: message.chatId }).toArray();
+            for (const p of participants) {
+              await offlineMessageManager.broadcastMessage({ type: 'reactionAdded', data }, undefined, [p.userId]);
+            }
+          } else {
+            io.to([`user:${message.senderId}`,`user:${message.receiverId}`]).emit('reactionAdded', data);
+            const targets = Array.from(new Set([message.senderId, message.receiverId]));
+            for (const id of targets) {
+              await offlineMessageManager.broadcastMessage({ type: 'reactionAdded', data }, undefined, [id]);
+            }
+          }
         }
       } catch (error) {
         console.error('Error in addReaction:', error);
@@ -170,7 +226,7 @@ io.on('connection', async (socket: UserSocket) => {
     });
 
     socket.on('chatMessage', async (data: MessageAttributes & { participants?: ChatParticipant[] }) => {
-      const senderId = data.senderId || data.sender?.id;
+      const senderId = data.messageType === 'DMs' ? data.senderId : data.sender?.id;
       try {
         // console.log('Message')
         // console.log(data)
@@ -183,136 +239,112 @@ io.on('connection', async (socket: UserSocket) => {
           return;
         }
 
-      // Handle multiple file uploads (if attachments exist)
-      let attachmentsWithUrls = [];
-      if (data.attachments && data.attachments.length > 0) {
-        // Upload each file to S3 and store the URLs
-        for (const file of data.attachments) {
-          try {
-            const fileBuffer = Buffer.from(file.data || ''); // Assuming file.data is the file content as a Buffer
-            const fileUrl = await uploadFileToS3('files-for-chat',fileBuffer, file.name, file.type);
-            attachmentsWithUrls.push({
-              name: file.name,
-              type: file.type,
-              url: fileUrl, // Add the S3 URL to the attachment
-              size: Buffer.byteLength(fileBuffer)
-            });
-          } catch (error) {
-            console.error('Error uploading file to S3:', error);
-            attachmentsWithUrls.push({
-              name: file.name,
-              type: file.type,
-              url: undefined, // Mark the file as failed to upload
-            });
-          }
-        }
-      }
-
-      // Messages Collection
-      let messageId: ObjectId;
-      try {
-        messageId = new ObjectId(data._id as unknown as string);
-      } catch (error) {
-        console.error('Invalid message ID format:', data._id);
-        io.to(`user:${senderId}`).emit('chatError', { error: 'Invalid message ID format' });
-        return;
-      }
-
-      const message: MessageAttributes = {
-        _id: messageId,
-        chatId: data.chatId, // Reference to the chat in DMs collection
-        senderId: senderId,
-        sender: data.sender,
-        receiverId: data.receiverId,
-        content: data.content,
-        timestamp: data.timestamp ? new Date(data.timestamp).toISOString() : new Date().toISOString(),
-        messageType: data.messageType,
-        reactions: data.reactions || [],
-        attachments: attachmentsWithUrls || [],
-        quotedMessageId: data.quotedMessageId,
-        status: 'sent' as msgStatus,
-      };
-      
-      // Assuming `message` is defined and contains the necessary properties
-      const chatsParticipants = data.participants || await db.chatParticipants().find({ chatId: message.chatId }).toArray();
-      
-      // Validate participants data structure
-      if (chatsParticipants && chatsParticipants.length > 0) {
-        // Filter out invalid participants
-        const validParticipants = chatsParticipants.filter(participant => 
-          participant && 
-          participant.userId && 
-          typeof participant.userId === 'string' && 
-          participant.userId.trim() !== ''
-        );
-        
-        if (validParticipants.length === 0) {
-          console.warn('No valid participants found for chat message');
-          chatsParticipants.length = 0; // Reset to empty array
-        } else if (validParticipants.length !== chatsParticipants.length) {
-          console.warn(`Filtered out ${chatsParticipants.length - validParticipants.length} invalid participants`);
-          chatsParticipants.splice(0, chatsParticipants.length, ...validParticipants);
-        }
-      }
-      
-      // Only proceed if we have valid participants
-      if (chatsParticipants && chatsParticipants.length > 0) {
-        const participantUpdates = chatsParticipants.map((participant) => ({
-          updateOne: {
-            filter: { chatId: message.chatId.toString(), userId: participant.userId },
-            update: {
-              $set: {
-                lastMessageId: message?._id?.toString() || '',
-                lastUpdated: new Date().toISOString()
-              },
-              $inc: {
-                unreadCount: 1
-              }
+        // Handle multiple file uploads (if attachments exist)
+        let attachmentsWithUrls = [];
+        if (data.attachments && data.attachments.length > 0) {
+          // Upload each file to S3 and store the URLs
+          for (const file of data.attachments) {
+            try {
+              const fileBuffer = Buffer.from(file.data || ''); // Assuming file.data is the file content as a Buffer
+              const fileUrl = await uploadFileToS3('files-for-chat',fileBuffer, file.name, file.type);
+              attachmentsWithUrls.push({
+                name: file.name,
+                type: file.type,
+                url: fileUrl, // Add the S3 URL to the attachment
+                size: Buffer.byteLength(fileBuffer)
+              });
+            } catch (error) {
+              console.error('Error uploading file to S3:', error);
+              attachmentsWithUrls.push({
+                name: file.name,
+                type: file.type,
+                url: undefined, // Mark the file as failed to upload
+              });
             }
           }
-        }));
+        }
 
-        // Only perform bulk write if we have valid updates
-        if (participantUpdates.length > 0) {
-          // Validate the operations array structure
-          const validOperations = participantUpdates.filter(op => 
-            op && 
-            op.updateOne && 
-            op.updateOne.filter && 
-            op.updateOne.update &&
-            op.updateOne.filter.chatId && 
-            op.updateOne.filter.userId &&
-            op.updateOne.update.$set && 
-            op.updateOne.update.$inc
+        // Messages Collection
+        let messageId: ObjectId;
+        try {
+          messageId = new ObjectId(data._id as unknown as string);
+        } catch (error) {
+          console.error('Invalid message ID format:', data._id);
+          io.to(`user:${senderId}`).emit('chatError', { error: 'Invalid message ID format' });
+          return;
+        }
+
+        const message: MessageAttributes = {
+          _id: messageId,
+          chatId: data.chatId, // Reference to the chat in DMs collection
+          senderId: senderId,
+          sender: data.sender,
+          receiverId: data.receiverId,
+          content: data.content,
+          timestamp: data.timestamp ? new Date(data.timestamp).toISOString() : new Date().toISOString(),
+          messageType: data.messageType,
+          reactions: data.reactions || [],
+          attachments: attachmentsWithUrls || [],
+          quotedMessageId: data.quotedMessageId,
+          status: 'sent' as msgStatus,
+        };
+        
+        // Assuming `message` is defined and contains the necessary properties
+        const chatsParticipants = data.participants || await db.chatParticipants().find({ chatId: message.chatId }).toArray();
+        
+        // Validate participants data structure
+        if (chatsParticipants && chatsParticipants.length > 0) {
+          // Filter out invalid participants
+          const validParticipants = chatsParticipants.filter(participant => 
+            participant && 
+            participant.userId && 
+            typeof participant.userId === 'string' && 
+            participant.userId.trim() !== ''
           );
           
-          if (validOperations.length === 0) {
-            console.error('No valid operations found for bulkWrite');
-            // Fallback to individual updates
-            for (const participant of chatsParticipants) {
-              try {
-                await db.chatParticipants().updateOne(
-                  { chatId: message.chatId.toString(), userId: participant.userId },
-                  {
-                    $set: {
-                      lastMessageId: message?._id?.toString() || '',
-                      lastUpdated: new Date().toISOString()
-                    },
-                    $inc: {
-                      unreadCount: 1
-                    }
-                  }
-                );
-              } catch (updateError) {
-                console.error(`Error updating participant ${participant.userId}:`, updateError);
+          if (validParticipants.length === 0) {
+            console.warn('No valid participants found for chat message');
+            chatsParticipants.length = 0; // Reset to empty array
+          } else if (validParticipants.length !== chatsParticipants.length) {
+            console.warn(`Filtered out ${chatsParticipants.length - validParticipants.length} invalid participants`);
+            chatsParticipants.splice(0, chatsParticipants.length, ...validParticipants);
+          }
+        }
+        
+        // Only proceed if we have valid participants
+        if (chatsParticipants && chatsParticipants.length > 0) {
+          const participantUpdates = chatsParticipants.map((participant) => ({
+            updateOne: {
+              filter: { chatId: message.chatId.toString(), userId: participant.userId },
+              update: {
+                $set: {
+                  lastMessageId: message?._id?.toString() || '',
+                  lastUpdated: new Date().toISOString()
+                },
+                $inc: {
+                  unreadCount: 1
+                }
               }
             }
-          } else {
-            try {
-              await db.chatParticipants().bulkWrite(validOperations);
-            } catch (error) {
-              console.error('Error in bulkWrite operation:', error);
-              // Fallback to individual updates if bulkWrite fails
+          }));
+
+          // Only perform bulk write if we have valid updates
+          if (participantUpdates.length > 0) {
+            // Validate the operations array structure
+            const validOperations = participantUpdates.filter(op => 
+              op && 
+              op.updateOne && 
+              op.updateOne.filter && 
+              op.updateOne.update &&
+              op.updateOne.filter.chatId && 
+              op.updateOne.filter.userId &&
+              op.updateOne.update.$set && 
+              op.updateOne.update.$inc
+            );
+            
+            if (validOperations.length === 0) {
+              console.error('No valid operations found for bulkWrite');
+              // Fallback to individual updates
               for (const participant of chatsParticipants) {
                 try {
                   await db.chatParticipants().updateOne(
@@ -331,92 +363,142 @@ io.on('connection', async (socket: UserSocket) => {
                   console.error(`Error updating participant ${participant.userId}:`, updateError);
                 }
               }
+            } else {
+              try {
+                await db.chatParticipants().bulkWrite(validOperations);
+              } catch (error) {
+                console.error('Error in bulkWrite operation:', error);
+                // Fallback to individual updates if bulkWrite fails
+                for (const participant of chatsParticipants) {
+                  try {
+                    await db.chatParticipants().updateOne(
+                      { chatId: message.chatId.toString(), userId: participant.userId },
+                      {
+                        $set: {
+                          lastMessageId: message?._id?.toString() || '',
+                          lastUpdated: new Date().toISOString()
+                        },
+                        $inc: {
+                          unreadCount: 1
+                        }
+                      }
+                    );
+                  } catch (updateError) {
+                    console.error(`Error updating participant ${participant.userId}:`, updateError);
+                  }
+                }
+              }
             }
           }
         }
-      }
 
-      // Update chat with last message info
-      try {
-        let chatObjectId: ObjectId;
+        // Update chat with last message info
         try {
-          chatObjectId = new ObjectId(message.chatId);
-        } catch (error) {
-          console.error('Invalid chat ID format:', message.chatId);
-          return;
-        }
-        
-        await db.chats().updateOne(
-          { _id: chatObjectId }, 
-          { 
-            $set: { 
-              lastMessageId: message?._id?.toString() || '', 
-              lastUpdated: new Date().toISOString() 
-            } 
+          let chatObjectId: ObjectId;
+          try {
+            chatObjectId = new ObjectId(message.chatId);
+          } catch (error) {
+            console.error('Invalid chat ID format:', message.chatId);
+            return;
           }
-        );
-      } catch (error) {
-        console.error('Error updating chat:', error);
-      }
-
-      try {
-        await db.chatMessages().insertOne({
-          ...message,
-        });
-      } catch (error) {
-        console.error('Error inserting chat message:', error);
-        io.to(`user:${senderId}`).emit('chatError', { error: 'Failed to save message' });
-        return;
-      }
-
-      // Read receipts
-      if (chatsParticipants && chatsParticipants.length > 0) {
-        message.isRead = chatsParticipants.reduce((acc, participant) => {
-          acc[participant.userId] = false;
-          return acc;
-        }, {} as { [key: string]: boolean });
-        message.isRead[senderId] = true;
-
-        // Only insert read receipts if we have participants
-        try {
-          await db.readReceipts().insertMany(
-            chatsParticipants.map((participant) => ({
-              _id: new ObjectId(),
-              messageId: message?._id?.toString() || '',
-              userId: participant.userId,
-              chatId: message.chatId.toString(),
-              readAt: new Date().toISOString()
-            }))
+          
+          await db.chats().updateOne(
+            { _id: chatObjectId }, 
+            { 
+              $set: { 
+                lastMessageId: message?._id?.toString() || '', 
+                lastUpdated: new Date().toISOString() 
+              } 
+            }
           );
         } catch (error) {
-          console.error('Error inserting read receipts:', error);
-          // Continue processing even if read receipts fail
+          console.error('Error updating chat:', error);
         }
-      } else {
-        // Initialize isRead with just the sender if no participants
-        message.isRead = { [senderId]: true };
-      }
 
-      if (data.messageType === 'Groups') {
         try {
-          io.to(`group:${data.receiverId}`).emit('newMessage', message);
-          // console.log('messageType & Groups')
+          await db.chatMessages().insertOne({
+            ...message,
+          });
         } catch (error) {
-          console.error('Error emitting group message:', error);
+          console.error('Error inserting chat message:', error);
+          io.to(`user:${senderId}`).emit('chatError', { error: 'Failed to save message' });
+          return;
         }
-      } else {
-        try {
-          io.to(`user:${senderId}`).emit('newMessage', message);
-          io.to(`user:${data.receiverId}`).emit('newMessage', message);
-        } catch (error) {
-          console.error('Error emitting direct message:', error);
+
+        // Read receipts
+        if (chatsParticipants && chatsParticipants.length > 0) {
+          message.isRead = chatsParticipants.reduce((acc, participant) => {
+            acc[participant.userId] = false;
+            return acc;
+          }, {} as { [key: string]: boolean });
+          message.isRead[senderId] = true;
+
+          // Only insert read receipts if we have participants
+          try {
+            await db.readReceipts().insertMany(
+              chatsParticipants.map((participant) => ({
+                _id: new ObjectId(),
+                messageId: message?._id?.toString() || '',
+                userId: participant.userId,
+                chatId: message.chatId.toString(),
+                readAt: new Date().toISOString()
+              }))
+            );
+          } catch (error) {
+            console.error('Error inserting read receipts:', error);
+            // Continue processing even if read receipts fail
+          }
+        } else {
+          // Initialize isRead with just the sender if no participants
+          message.isRead = { [senderId]: true };
         }
+
+        if (data.messageType === 'Groups') {
+          try {
+            // Live emit to group members in room
+            io.to(`group:${data.receiverId}`).emit('newMessage', message);
+          } catch (error) {
+            console.error('Error emitting group message:', error);
+          }
+          try {
+            // Queue for offline group members: fetch participants
+            const participants = await db.chatParticipants().find({ chatId: data.chatId }).toArray();
+            const userIds = participants.map(p => p.userId).filter(Boolean);
+            for (const id of userIds) {
+              await offlineMessageManager.broadcastMessage({
+                type: 'newMessage',
+                data: message
+              }, undefined, [id]);
+            }
+          } catch (error) {
+            console.error('Error queuing group message for offline users:', error);
+          }
+        } else {
+          try {
+            // Live emit to sender and receiver
+            io.to(`user:${senderId}`).emit('newMessage', message);
+            io.to(`user:${data.receiverId}`).emit('newMessage', message);
+          } catch (error) {
+            console.error('Error emitting direct message:', error);
+          }
+          try {
+            // Queue for offline sender/receiver
+            const targets = Array.from(new Set([senderId, data.receiverId]));
+            for (const id of targets) {
+              await offlineMessageManager.broadcastMessage({
+                type: 'newMessage',
+                data: message
+              }, undefined, [id]);
+            }
+          } catch (error) {
+            console.error('Error queuing direct message for offline users:', error);
+          }
+        }
+      } catch (error) {
+        console.error('Error in chatMessage handler:', error);
+        io.to(`user:${senderId}`).emit('chatError', { error: 'Failed to process chat message' });
       }
-    } catch (error) {
-      console.error('Error in chatMessage handler:', error);
-      io.to(`user:${senderId}`).emit('chatError', { error: 'Failed to process chat message' });
-    }
-  });
+    });
 
     socket.on('typing', (data: { user: Partial<UserSchema>, to: string }) => {
       try {

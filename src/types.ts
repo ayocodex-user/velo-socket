@@ -1,11 +1,11 @@
 import { ObjectId } from "mongodb";
 
-export interface User {
+export type User = {
   name: string;
   id: number;
 }
 
-export interface ReadReceipt {
+export type ReadReceipt = {
   _id: ObjectId;
   messageId: string;
   userId: string;
@@ -13,7 +13,7 @@ export interface ReadReceipt {
   readAt: string;
 }
 
-export interface Reaction{
+export type Reaction ={
   _id: ObjectId,
   messageId: string,
   userId: string,
@@ -23,7 +23,7 @@ export interface Reaction{
 
 export type ChatType = 'Personal' | 'DMs' | 'Groups' | 'Channels';
 
-export interface UserSchema {
+export type UserSchema = {
   _id?: ObjectId | string | undefined,
   bio?: string,
   confirmationToken?: string,
@@ -68,7 +68,7 @@ export interface UserSchema {
   website?: string
 };
 
-export interface UserSettings {
+export type UserSettings = {
   twoFactorAuth: boolean;
   loginAlerts: boolean;
   showOnlineStatus: boolean;
@@ -77,14 +77,14 @@ export interface UserSettings {
   showTypingStatus: boolean;
 }
 
-export interface FollowersSchema {
+export type FollowersSchema = {
   followerId: string,
   followedId: string,
   time: string,
   follow?: true,
 }
 
-export interface TokensSchema {
+export type TokensSchema = {
   _id: ObjectId,
   userId: string,
   token: string,
@@ -93,13 +93,13 @@ export interface TokensSchema {
   expiresAt: string,
 }
 
-export interface VideoSchema {
+export type VideoSchema = {
   _id: ObjectId,
   userId: string,
   video: string,
 }
 
-export interface PostSchema {
+export type PostSchema = {
   _id: string;
   UserId: string;
   DisplayPicture: string;
@@ -126,7 +126,7 @@ export interface PostSchema {
   OriginalPostId?: string;
 }
 
-export interface ChatParticipant {
+export type ChatParticipant = {
   _id: ObjectId;
   chatId: string;
   lastMessageId: string;
@@ -141,7 +141,7 @@ export interface ChatParticipant {
   chatType: ChatType;
 }
 
-export interface ChatSettings {
+export type ChatSettings = {
   // General settings
   isMuted: boolean;
   isPinned: boolean;
@@ -162,7 +162,7 @@ export interface ChatSettings {
   lastSeen: string; // Timestamp of the last time the user was online
 }
 
-export interface ChatAttributes {
+export type ChatAttributes = {
   _id?: ObjectId; // Or string depending on your chat ID format
   name: string;
   lastMessage: string;
@@ -186,7 +186,7 @@ export interface ChatAttributes {
   lastUpdated: string; // Consider using a specific date/time type library
 }
 
-export interface NewChatResponse {
+export type NewChatResponse = {
   _id?: string | ObjectId | undefined; // Assuming ObjectId is converted to string
   name: string;
   lastMessageId: string;
@@ -199,7 +199,7 @@ export interface NewChatResponse {
   displayPicture?: string,
 }
 
-export interface NewChat {
+export type NewChat = {
   _id?: string | ObjectId | undefined; // Assuming ObjectId is converted to string
   id?: string;
   name: { [id: string]: string };
@@ -218,7 +218,7 @@ export interface NewChat {
   timestamp?: Date | undefined;
 }
 
-export interface NewChatSettings {
+export type NewChatSettings = {
   _id: ObjectId; // Assuming ObjectId is converted to string
   chatId: ObjectId; // Reference to the chat in Chats collection
 
@@ -241,14 +241,14 @@ export interface NewChatSettings {
 
 export type msgStatus = 'sending' | 'sent' | 'delivered' | 'failed';
 
-export interface Attachment {
+export type Attachment = {
   name: string; // File name (e.g., "image.png")
   type: string; // MIME type (e.g., "image/png")
   data?: number[]; // File content as an array of bytes (Uint8Array converted to number[]). It is not stored in the database.
   url?: string;
 }
 
-export interface MessageAttributes {
+export type MessageAttributes = {
   _id?: ObjectId;
   chatId: string; // Reference to the chat in Chats collection
   senderId: string;
@@ -264,7 +264,7 @@ export interface MessageAttributes {
   status: msgStatus;
 }
 
-export interface GroupMessageAttributes {
+export type GroupMessageAttributes = {
   _id?: ObjectId | string;
   chatId: ObjectId | string; // Reference to the chat in Chats collection
   sender: {
@@ -292,7 +292,7 @@ export interface Err {
   [x: string]: string
 }
 
-export interface Schema {
+export type Schema = {
   _id?: ObjectId,
   time?: string,
   userId?: string,
@@ -337,7 +337,7 @@ export type AllChats = {
   requestId: string
 }
 
-export interface Participant {
+export type Participant = {
   _id: ObjectId;
   lastMessageId: string;
   unreadCount: number;
@@ -352,12 +352,12 @@ export interface Participant {
   chatType: ChatType;
 }
 
-export interface NewChat_ {
+export type NewChat_ = {
   chat: ChatData;
   requestId: string;
 }
 
-export interface ChatData {
+export type ChatData = {
   _id: ObjectId;
   name: {
       [id: string]: string
@@ -375,7 +375,7 @@ export interface ChatData {
   lastUpdated: string;
 }
 
-export interface ConvoType {
+export type ConvoType = {
   id: string;
   type: string;
   name: string;
@@ -409,7 +409,7 @@ export enum CommentPermission {
   None = 'none',
 }
 
-export interface BlogPost {
+export type BlogPost = {
   _id: ObjectId;
   UserId: string;
   DisplayPicture: string;

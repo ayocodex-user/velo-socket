@@ -3,7 +3,7 @@ config()
 import cors from "cors";
 import Redis from "ioredis";
 import { join } from 'path';
-import { updateUserOnlineStatus, updateLastActive, fetchUserGroups, updateReadReceipts } from './utils.js';
+import { updateUserOnlineStatus, updateLastActive, fetchUserGroups, updateReadReceipts, HEARTBEAT_INTERVAL, ONLINE_USERS_KEY, USER_TIMEOUT } from './utils.js';
 import { getMongoDb } from './mongodb.js';
 import './socket/chats.js'
 import './socket/blog.js'
@@ -12,19 +12,20 @@ import './socket/calls.js'
 import { io, UserSocket } from './socket.js';
 import { app, corsOptions, server } from './server.js';
 import callsRouter from './routes/calls.js';
+import { OfflineMessageManager, offlineMessageManager } from './offline-messages.js';
+import { redis as sharedRedis } from './redis.js';
+import { checkPortBySystem } from './checkPort.js';
 
 app.use(cors(corsOptions));
 
 // API routes
 app.use('/api/calls', callsRouter);
 
-const port = 8080;
+let port = 8080;
 
-export const redis = new Redis(process.env.REDIS_URL || '');
+export const redis = sharedRedis;
 
-export const ONLINE_USERS_KEY = 'online_users';
-export const HEARTBEAT_INTERVAL = 30000; // 30 seconds
-export const USER_TIMEOUT = 60; // 60 seconds
+// offlineMessageManager is initialized in offline-messages.ts using shared redis
 
 // Socket connection handling
 io.on('connection', async (socket: UserSocket) => {
@@ -51,13 +52,17 @@ io.on('connection', async (socket: UserSocket) => {
         await redis.sadd(ONLINE_USERS_KEY, userId);
         await updateUserOnlineStatus(userId, true, redis, USER_TIMEOUT);
       }
+      // Join personal and group rooms BEFORE emitting pending messages
       socket.join(`user:${userId}`);
       socket.join(groups);
+
+      // Always attempt to deliver any pending offline messages after joining rooms
+      await offlineMessageManager.handleUserOnline(userId);
       // console.log(`User ${userId} joined group:${groups}`);
     }
   });
 
-  updateUserOnlineStatus(userId as string, true, redis, USER_TIMEOUT)
+  updateUserOnlineStatus(userId as string, true, redis, USER_TIMEOUT);
 
   socket.on('updateSettings', async (data: {
     twoFactorAuth: boolean;
@@ -66,7 +71,7 @@ io.on('connection', async (socket: UserSocket) => {
     showLastSeen: boolean;
     showReadReceipts: boolean;
     showTypingStatus: boolean;
-}) => {
+  }) => {
     console.log('updateSettings: ' + data);
     if (data.showOnlineStatus) {
       await updateUserOnlineStatus(userId as string, true, redis, USER_TIMEOUT);
@@ -228,7 +233,7 @@ io.on('connection', async (socket: UserSocket) => {
 
   socket.on('subscribeToUser', async (userId: string) => {
     socket.join(`user:${userId}`);
-    const isOnline = await redis.get(`user:${userId}:online`);
+    const isOnline = Boolean(await redis.sismember(ONLINE_USERS_KEY, userId));
     io.emit('userStatus', { userId, status: isOnline ? 'online' : 'offline' });
   });
 
@@ -274,8 +279,17 @@ app.get("*", (_, res) => {
 })
 
 // Start the server
+let isPortInUse = await checkPortBySystem(port);
+
+while (isPortInUse.inUse) {
+  console.log(`Port ${port} is already in use`);
+  port = port + 1;
+  isPortInUse = await checkPortBySystem(port);
+}
+
 server.listen(port, () => {
   console.log(`Listening on port ${port}...`);
-}).on('error', (error) => {
-  console.error('Server error:', error);
+}).on('error', async (error) => {
+  console.error('Server error ->', error.message);
+  isPortInUse = await checkPortBySystem(port);
 });
