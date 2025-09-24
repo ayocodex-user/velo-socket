@@ -3,6 +3,7 @@ import { getMongoDb } from "../mongodb.js";
 import { BlogPost, ReactionType, SharedBlogPost } from "../types.js";
 import { io } from '../socket.js';
 import { deleteFileFromS3 } from "../s3.js";
+import { offlineMessageManager } from '../offline-messages.js';
 
 io.on('connection', (socket) => {
     const userId = socket.handshake.query.userId as string;
@@ -90,14 +91,17 @@ io.on('connection', (socket) => {
 
             io.to(`user:${userId}`).emit("post_reaction_response", { message: "Reaction added successfully!", success: true, reaction: data.type });
             
-            io.emit("updatePost", { 
-                excludeUser: userId,
-                postId: post.PostID,  
-                update: {
-                    [data.key]: data.value === 'inc' ? post[data.key] + 1 : post[data.key] - 1
-                },
-                type: data.type
-            })
+            // Use offline message system instead of direct broadcast
+            await offlineMessageManager.broadcastMessage({
+                type: 'updatePost',
+                data: { 
+                    postId: post.PostID,  
+                    update: {
+                        [data.key]: data.value === 'inc' ? post[data.key] + 1 : post[data.key] - 1
+                    },
+                    type: data.type
+                }
+            }, userId);
         } catch (err) {
             console.error('Error processing reaction(reactToPost):', err);
             io.to(`user:${userId}`).emit('error', 'Error processing reaction(reactToPost)');
@@ -167,11 +171,14 @@ io.on('connection', (socket) => {
                     { $inc: { NoOfShares: -1 } }
                 );
 
-                io.emit("deletePost", { 
-                    excludeUserId: userId,
-                    postId: post.PostID,
-                    type: data.action
-                })
+                // Use offline message system for post updates
+                await offlineMessageManager.broadcastMessage({
+                    type: 'deletePost',
+                    data: { 
+                        postId: post.PostID,
+                        type: data.action
+                    }
+                }, userId);
             } else {
                 if (data.type === "repost") {
                     if (existingRepost) {
@@ -205,19 +212,24 @@ io.on('connection', (socket) => {
                         { $inc: { NoOfShares: 1 } }
                     );
             
-                    io.emit("updatePost", { 
-                        excludeUserId: userId,
-                        postId: data.post.PostID, 
-                        update: {
-                            NoOfShares: data.action === 'share' ? post.NoOfShares + 1 : post.NoOfShares - 1
-                        },
-                        type: data.action 
-                    })
+                    // Use offline message system for post updates
+                    await offlineMessageManager.broadcastMessage({
+                        type: 'updatePost',
+                        data: { 
+                            postId: data.post.PostID, 
+                            update: {
+                                NoOfShares: data.action === 'share' ? post.NoOfShares + 1 : post.NoOfShares - 1
+                            },
+                            type: data.action 
+                        }
+                    }, userId);
         
-                    io.emit("newPost", {
-                        excludeUser: userId,
-                        blog: repost,
-                    });
+                    await offlineMessageManager.broadcastMessage({
+                        type: 'newPost',
+                        data: {
+                            blog: repost,
+                        }
+                    }, userId);
                 } else if (data.type === "quote") {
                     // Create a new quoted post
                     const quote: SharedBlogPost = {
@@ -254,19 +266,24 @@ io.on('connection', (socket) => {
                         { $inc: { NoOfShares: 1 } }
                     );
             
-                    io.emit("updatePost", { 
-                        excludeUserId: userId,
-                        postId: data.post.OriginalPostId, 
-                        update: {
-                            NoOfShares: data.action === 'share' ? post.NoOfShares + 1 : post.NoOfShares - 1
-                        },
-                        type: data.action 
-                    })
+                    // Use offline message system for post updates
+                    await offlineMessageManager.broadcastMessage({
+                        type: 'updatePost',
+                        data: { 
+                            postId: data.post.OriginalPostId, 
+                            update: {
+                                NoOfShares: data.action === 'share' ? post.NoOfShares + 1 : post.NoOfShares - 1
+                            },
+                            type: data.action 
+                        }
+                    }, userId);
         
-                    io.emit("newPost", {
-                        excludeUser: userId,
-                        blog: quote,
-                    });
+                    await offlineMessageManager.broadcastMessage({
+                        type: 'newPost',
+                        data: {
+                            blog: quote,
+                        }
+                    }, userId);
                 }
             }
 
@@ -357,26 +374,34 @@ io.on('connection', (socket) => {
             
                 await PostsOrSharesOrComments.updateOne({ PostID: data.ParentId }, { $inc: { NoOfComment: 1} });
 
-                io.emit("newComment", { 
-                    excludeUser: userId, 
-                    blog: blog 
-                })
+                // Use offline message system for new comments
+                await offlineMessageManager.broadcastMessage({
+                    type: 'newComment',
+                    data: { 
+                        blog: blog 
+                    }
+                }, userId);
 
-                io.emit("updatePost", { 
-                    excludeUserId: userId,
-                    postId: blog.ParentId, 
-                    update: {
-                        NoOfComment: post.NoOfComment + 1
-                    },
-                    type: blog.Type 
-                })
+                await offlineMessageManager.broadcastMessage({
+                    type: 'updatePost',
+                    data: { 
+                        postId: blog.ParentId, 
+                        update: {
+                            NoOfComment: post.NoOfComment + 1
+                        },
+                        type: blog.Type 
+                    }
+                }, userId);
             } else {
                 await posts.insertOne(blog)
                 
-                io.emit("newPost", { 
-                    excludeUser: userId, 
-                    blog: blog 
-                })
+                // Use offline message system for new posts
+                await offlineMessageManager.broadcastMessage({
+                    type: 'newPost',
+                    data: { 
+                        blog: blog 
+                    }
+                }, userId);
             }
         
             io.to(`user:${userId}`).emit("post_response", { 
@@ -445,21 +470,25 @@ io.on('connection', (socket) => {
             }
             // If the post is a comment, update the parent post
             if(post.Type === 'comment') {
-                io.emit("updatePost", { 
-                    excludeUserId: userId,
-                    postId: post.ParentId, 
-                    update: {
-                        NoOfComments: post.NoOfComments > 0 ? post.NoOfComments - 1 : 0
-                    },
-                    type: post.Type 
-                })
+                await offlineMessageManager.broadcastMessage({
+                    type: 'updatePost',
+                    data: { 
+                        postId: post.ParentId, 
+                        update: {
+                            NoOfComments: post.NoOfComments > 0 ? post.NoOfComments - 1 : 0
+                        },
+                        type: post.Type 
+                    }
+                }, userId);
             }
 
-            // Emit an event to notify other users about the deleted post
-            io.emit("deletePost", { 
-                excludeUserId: userId, 
-                postId: data.postId 
-            });
+            // Use offline message system for post deletion
+            await offlineMessageManager.broadcastMessage({
+                type: 'deletePost',
+                data: { 
+                    postId: data.postId 
+                }
+            }, userId);
 
             io.to(`user:${userId}`).emit("delete_post_response", { 
                 message: "Post deleted successfully!", 

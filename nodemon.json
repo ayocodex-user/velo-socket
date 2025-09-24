@@ -1,5 +1,5 @@
 {
     "watch": ["src/**/*"],
     "ext": "ts",
-    "exec": "tsc && node ./dist/app.js"
+    "exec": "node --loader ts-node/esm src/app.ts"
 }
