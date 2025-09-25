@@ -1,0 +1,30 @@
+name: Auto Cross-Repo PR from Dev to Main
+
+on:
+  push:
+    branches: [dev]
+
+permissions:
+  contents: read
+
+jobs:
+  create-cross-repo-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create Pull Request to Upstream
+        env:
+          GITHUB_TOKEN: ${{ secrets.PR_CREATOR_TOKEN }}
+        run: |
+          API_URL="https://api.github.com/repos/ayocodex-user/velo-socket/pulls"
+          PR_DATA=$(jq -n \
+            --arg title "Auto PR: Merge dev from fork to main" \
+            --arg head "ojutalayomi:dev" \
+            --arg base "main" \
+            --arg body "This is an automated pull request from fork's dev branch to upstream main. **Note:** Created by GitHub Actions." \
+            '{title: $title, head: $head, base: $base, body: $body}')
+          RESPONSE=$(curl -s -o response.json -w "%{http_code}" -X POST -H "Authorization: token $GITHUB_TOKEN" -d "$PR_DATA" "$API_URL")
+          cat response.json
+          if [ "$RESPONSE" != "201" ]; then
+            echo "::error::Failed to create PR. See response above."
+            exit 1
+          fi
