@@ -125,10 +125,12 @@ export class OfflineMessageManager {
    */
   async handleUserOnline(userId: string): Promise<void> {
     const messages = await this.getMessagesForUser(userId);
+    console.log('messages', messages);
     
     if (messages.length > 0) {
       // Send all pending messages
       for (const message of messages) {
+        console.log('message', message);
         io.to(`user:${userId}`).emit(message.type, message.data);
       }
       
