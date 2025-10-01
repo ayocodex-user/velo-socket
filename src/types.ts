@@ -242,31 +242,28 @@ export type NewChatSettings = {
 export type msgStatus = 'sending' | 'sent' | 'delivered' | 'failed';
 
 export type Attachment = {
+  key: string;
   name: string; // File name (e.g., "image.png")
   type: string; // MIME type (e.g., "image/png")
-  data?: number[]; // File content as an array of bytes (Uint8Array converted to number[]). It is not stored in the database.
+  data?: number[]; // File content as an array of bytes (Uint8Array converted to number[])
   url?: string;
-}
+  size?: number;
+  lastModified?: string;
+};
 
-export type MessageAttributes = {
-  _id?: ObjectId;
-  chatId: string; // Reference to the chat in Chats collection
-  senderId: string;
-  sender?: { id: string; name: string; displayPicture: string; username: string; verified: boolean };
-  receiverId: string;
-  content: string;
-  timestamp: string;
-  messageType: string;
-  isRead?: { [participantId: string]: boolean }; // Object with participant IDs as keys and their read status as values
-  reactions: Reaction[];
-  attachments: Attachment[];
-  quotedMessageId: string;
-  status: msgStatus;
-}
+export type AttachmentSchema = {
+  _id: ObjectId;
+  url: string;
+  key: string;
+  name: string; // File name (e.g., "image.png")
+  type: string; // MIME type (e.g., "image/png")
+  size: number;
+  uploadedAt: string;
+};
 
-export type GroupMessageAttributes = {
+export interface MessageAttributes {
   _id?: ObjectId | string;
-  chatId: ObjectId | string; // Reference to the chat in Chats collection
+  chatId: string;
   sender: {
     id: string;
     name: string;
@@ -277,9 +274,31 @@ export type GroupMessageAttributes = {
   receiverId: string;
   content: string;
   timestamp: string;
+  isRead?: { [participantId: string]: boolean }; // Object with participant IDs as keys and their read status as values
   messageType: string;
   reactions: Reaction[];
   attachments: Attachment[];
+  quotedMessageId: string;
+  status: msgStatus;
+}
+
+export interface MessageSchema {
+  _id?: ObjectId | string;
+  chatId: string;
+  sender: {
+    id: string;
+    name: string;
+    displayPicture: string;
+    username: string;
+    verified: boolean;
+  };
+  receiverId: string;
+  content: string;
+  timestamp: string;
+  isRead?: { [participantId: string]: boolean }; // Object with participant IDs as keys and their read status as values
+  messageType: string;
+  reactions: Reaction[];
+  attachments: string[];
   quotedMessageId: string;
   status: msgStatus;
 }
