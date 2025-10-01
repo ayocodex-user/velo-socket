@@ -1,7 +1,7 @@
 import { config } from 'dotenv';
 config()
 import { Db, MongoClient, ServerApiVersion } from 'mongodb';
-import { ChatData, ChatParticipant, ChatSettings, FollowersSchema, MessageAttributes, PostSchema, Reaction, ReadReceipt, TokensSchema, UserSchema, UserSettings, VideoSchema } from './types';
+import { AttachmentSchema, ChatData, ChatParticipant, ChatSettings, FollowersSchema, MessageSchema, PostSchema, Reaction, ReadReceipt, TokensSchema, UserSchema, UserSettings, VideoSchema } from './types';
 
 const uri = process.env.MONGOLINK || '';
 
@@ -166,7 +166,7 @@ export class MongoDBClient {
    * @returns Collection for storing chat messages
    */
   chatMessages() {
-    return this.db.collection<MessageAttributes>('Chat_Messages');
+    return this.db.collection<MessageSchema>('Chat_Messages');
   }
 
   /**
@@ -223,6 +223,14 @@ export class MongoDBClient {
    */
   subscriptions() {
     return this.db.collection('Subscriptions')
+  }
+
+  /**
+   * Gets the files collection
+   * @returns Collection for storing files
+   */
+  files() {
+    return this.db.collection<AttachmentSchema>("Files");
   }
 }
 

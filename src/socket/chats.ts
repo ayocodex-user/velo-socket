@@ -1,6 +1,6 @@
 import { ObjectId, WithId } from "mongodb";
 import { deleteFileFromS3, uploadFileToS3 } from "../s3.js";
-import { ChatParticipant, ChatSettings, ConvoType1, GroupMessageAttributes, MessageAttributes, msgStatus, NewChat_, Participant, Reaction, UserSchema } from "../types.js";
+import { AttachmentSchema, ChatParticipant, ChatSettings, ConvoType1, MessageAttributes, msgStatus, NewChat_, Participant, Reaction, UserSchema } from "../types.js";
 import { MongoDBClient } from "../mongodb.js";
 import { io, UserSocket } from '../socket.js';
 import { offlineMessageManager } from '../offline-messages.js';
@@ -79,8 +79,8 @@ io.on('connection', async (socket: UserSocket) => {
                 await offlineMessageManager.broadcastMessage({ type: 'reactionRemoved', data }, undefined, [p.userId]);
               }
             } else {
-              io.to([`user:${message.senderId}`,`user:${message.receiverId}`]).emit('reactionRemoved', data);
-              const targets = Array.from(new Set([message.senderId, message.receiverId]));
+              io.to([`user:${message.sender.id}`,`user:${message.receiverId}`]).emit('reactionRemoved', data);
+              const targets = Array.from(new Set([message.sender.id, message.receiverId]));
               for (const id of targets) {
                 await offlineMessageManager.broadcastMessage({ type: 'reactionRemoved', data }, undefined, [id]);
               }
@@ -101,8 +101,8 @@ io.on('connection', async (socket: UserSocket) => {
                 await offlineMessageManager.broadcastMessage({ type: 'reactionUpdated', data }, undefined, [p.userId]);
               }
             } else {
-              io.to([`user:${message.senderId}`,`user:${message.receiverId}`]).emit('reactionUpdated', data);
-              const targets = Array.from(new Set([message.senderId, message.receiverId]));
+              io.to([`user:${message.sender.id}`,`user:${message.receiverId}`]).emit('reactionUpdated', data);
+              const targets = Array.from(new Set([message.sender.id, message.receiverId]));
               for (const id of targets) {
                 await offlineMessageManager.broadcastMessage({ type: 'reactionUpdated', data }, undefined, [id]);
               }
@@ -121,8 +121,8 @@ io.on('connection', async (socket: UserSocket) => {
               await offlineMessageManager.broadcastMessage({ type: 'reactionAdded', data }, undefined, [p.userId]);
             }
           } else {
-            io.to([`user:${message.senderId}`,`user:${message.receiverId}`]).emit('reactionAdded', data);
-            const targets = Array.from(new Set([message.senderId, message.receiverId]));
+            io.to([`user:${message.sender.id}`,`user:${message.receiverId}`]).emit('reactionAdded', data);
+            const targets = Array.from(new Set([message.sender.id, message.receiverId]));
             for (const id of targets) {
               await offlineMessageManager.broadcastMessage({ type: 'reactionAdded', data }, undefined, [id]);
             }
@@ -167,12 +167,10 @@ io.on('connection', async (socket: UserSocket) => {
             if (messages && messages.length > 0) {
               for (const message of messages) {
                 if (message.attachments && message.attachments.length > 0) {
-                  for (const attachment of message.attachments) {
-                    try {
-                      await deleteFileFromS3('files-for-chat', attachment.name);
-                    } catch (error) {
-                      console.error('Error deleting attachment from S3:', error);
-                    }
+                  try {
+                    await deleteFileFromS3('files-for-chat', message.attachments);
+                  } catch (error) {
+                    console.error('Error deleting attachment from S3:', error);
                   }
                 }
               }
@@ -188,12 +186,10 @@ io.on('connection', async (socket: UserSocket) => {
             const messageId = new ObjectId(id);
             const message = await db.chatMessages().findOne({ _id: messageId });
             if (message && message.attachments && message.attachments.length > 0) {
-              for (const attachment of message.attachments) {
-                try {
-                  await deleteFileFromS3('files-for-chat', attachment.name);
-                } catch (error) {
-                  console.error('Error deleting attachment from S3:', error);
-                }
+              try {
+                await deleteFileFromS3('files-for-chat', message.attachments);
+              } catch (error) {
+                console.error('Error deleting attachment from S3:', error);
               }
             }
             await db.chatMessages().deleteOne({ _id: messageId })
@@ -226,7 +222,7 @@ io.on('connection', async (socket: UserSocket) => {
     });
 
     socket.on('chatMessage', async (data: MessageAttributes & { participants?: ChatParticipant[] }) => {
-      const senderId = data.messageType === 'DMs' ? data.senderId : data.sender?.id;
+      const senderId = data.sender?.id;
       try {
         // console.log('Message')
         // console.log(data)
@@ -240,25 +236,32 @@ io.on('connection', async (socket: UserSocket) => {
         }
 
         // Handle multiple file uploads (if attachments exist)
-        let attachmentsWithUrls = [];
+        let attachmentsWithUrls: AttachmentSchema[] = [];
         if (data.attachments && data.attachments.length > 0) {
           // Upload each file to S3 and store the URLs
           for (const file of data.attachments) {
             try {
               const fileBuffer = Buffer.from(file.data || ''); // Assuming file.data is the file content as a Buffer
-              const fileUrl = await uploadFileToS3('files-for-chat',fileBuffer, file.name, file.type);
+              const fileUrl = await uploadFileToS3('files-for-chat',fileBuffer, file.key, file.type);
               attachmentsWithUrls.push({
+                _id: new ObjectId(),
                 name: file.name,
+                key: file.name,
                 type: file.type,
                 url: fileUrl, // Add the S3 URL to the attachment
-                size: Buffer.byteLength(fileBuffer)
+                size: Buffer.byteLength(fileBuffer),
+                uploadedAt: new Date().toISOString()
               });
             } catch (error) {
               console.error('Error uploading file to S3:', error);
               attachmentsWithUrls.push({
+                _id: new ObjectId(),
                 name: file.name,
+                key: file.name,
                 type: file.type,
-                url: undefined, // Mark the file as failed to upload
+                url: "", // Mark the file as failed to upload
+                size: file.size || 0,
+                uploadedAt: new Date().toISOString()
               });
             }
           }
@@ -277,7 +280,6 @@ io.on('connection', async (socket: UserSocket) => {
         const message: MessageAttributes = {
           _id: messageId,
           chatId: data.chatId, // Reference to the chat in DMs collection
-          senderId: senderId,
           sender: data.sender,
           receiverId: data.receiverId,
           content: data.content,
@@ -418,10 +420,22 @@ io.on('connection', async (socket: UserSocket) => {
         try {
           await db.chatMessages().insertOne({
             ...message,
+            attachments: []
           });
         } catch (error) {
           console.error('Error inserting chat message:', error);
           io.to(`user:${senderId}`).emit('chatError', { error: 'Failed to save message' });
+          return;
+        }
+
+        // Files Collection
+        try {
+          if (attachmentsWithUrls.length > 0) {
+            await db.files().insertMany(attachmentsWithUrls);
+          }
+        } catch (error) {
+          console.error('Error inserting files:', error);
+          io.to(`user:${senderId}`).emit('chatError', { error: 'Failed to save files' });
           return;
         }
 
