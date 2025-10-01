@@ -465,7 +465,7 @@ io.on('connection', (socket) => {
 
             if(post.Image.length > 0) {
                 post.Image.map(async (media: string) => {
-                    await deleteFileFromS3('post-s', media);
+                    await deleteFileFromS3('post-s', [media]);
                 })
             }
             // If the post is a comment, update the parent post
