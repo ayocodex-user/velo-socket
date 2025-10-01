@@ -246,7 +246,7 @@ io.on('connection', async (socket: UserSocket) => {
               attachmentsWithUrls.push({
                 _id: new ObjectId(),
                 name: file.name,
-                key: file.name,
+                key: file.key,
                 type: file.type,
                 url: fileUrl, // Add the S3 URL to the attachment
                 size: Buffer.byteLength(fileBuffer),
@@ -257,7 +257,7 @@ io.on('connection', async (socket: UserSocket) => {
               attachmentsWithUrls.push({
                 _id: new ObjectId(),
                 name: file.name,
-                key: file.name,
+                key: file.key,
                 type: file.type,
                 url: "", // Mark the file as failed to upload
                 size: file.size || 0,
