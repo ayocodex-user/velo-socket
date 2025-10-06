@@ -1,7 +1,7 @@
 import { ObjectId } from "mongodb";
 
-import { MongoDBClient } from "../mongodb";
-import { Attachment, ChatType, MessageAttributes, MessageSchema, MessageType, msgStatus, Reaction } from "../types";
+import { MongoDBClient } from "../mongodb.js";
+import { Attachment, ChatType, MessageAttributes, MessageSchema, MessageType, msgStatus, Reaction } from "../types.js";
 
 /**
  * Represents a simplified chat message object in the application's database.

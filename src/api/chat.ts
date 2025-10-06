@@ -2,9 +2,9 @@
 import { Router } from 'express';
 import type { RequestHandler } from 'express';
 import { GoogleGenAI } from "@google/genai";
-import { MessageAttributes } from '../types';
-import { offlineMessageManager } from '../offline-messages';
-import { ChatMessage } from '../lib/ChatMessage';
+import { MessageAttributes } from '../types.js';
+import { offlineMessageManager } from '../offline-messages.js';
+import { ChatMessage } from '../lib/ChatMessage.js';
 
 const router = Router();
 
