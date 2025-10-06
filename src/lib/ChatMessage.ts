@@ -23,8 +23,10 @@ export class ChatMessage implements MessageSchema {
   
     // constructor to force use of factory methods
     constructor(data: MessageAttributes) {
-      // Generate a placeholder MongoDB ID
-      this._id = new ObjectId(data._id || "");
+      // Ensure a valid MongoDB ObjectId is always set
+      this._id = (typeof data._id === "string" && ObjectId.isValid(data._id))
+        ? new ObjectId(data._id)
+        : new ObjectId();
       this.chatId = data.chatId;
       this.receiverId = data.receiverId;
       this.content = data.content;
@@ -33,7 +35,7 @@ export class ChatMessage implements MessageSchema {
       this.isRead = data.isRead || {};
       this.sender = data.sender;
       this.reactions = data.reactions;
-      this.attachments = data.attachments.map(attachment => attachment.key);
+      this.attachments = (data.attachments || []).map(attachment => attachment.key);
       this.quotedMessageId = data.quotedMessageId;
       this.status = data.status;
       this.chatType = data.chatType;

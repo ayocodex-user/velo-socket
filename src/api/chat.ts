@@ -1,4 +1,3 @@
-// app/api/chat/route.ts
 import { Router } from 'express';
 import type { RequestHandler } from 'express';
 import { GoogleGenAI } from "@google/genai";
@@ -17,19 +16,26 @@ const chatHandler: RequestHandler = async (req, res) => {
 
     const chat = genAI.chats.create({
         model: "gemini-2.5-pro",
-        history: messages.slice(0, -1).map(msg => ({
-            role: msg.sender.id === 'user' ? 'user' : 'model',
-            parts: [
-                { 
-                    text: msg.content, 
-                    fileData: { 
-                        displayName: msg.attachments[0].name, 
-                        fileUri: msg.attachments[0].url, 
-                        mimeType: msg.attachments[0].type 
-                    } 
-                }
-            ],
-        })),
+        history: messages.slice(0, -1).map(msg => {
+            const hasAttachment = Array.isArray(msg.attachments) && msg.attachments.length > 0;
+            const parts = [
+                { text: msg.content },
+                ...(hasAttachment
+                    ? [{
+                        fileData: {
+                            displayName: msg.attachments[0].name,
+                            fileUri: msg.attachments[0].url,
+                            mimeType: msg.attachments[0].type
+                        }
+                    }]
+                    : [])
+            ];
+
+            return {
+                role: msg.sender.id === 'user' ? 'user' : 'model',
+                parts,
+            };
+        }),
         config: {
           maxOutputTokens: 5000,
           stopSequences: [
@@ -40,18 +46,25 @@ const chatHandler: RequestHandler = async (req, res) => {
             "explicit"
           ],
         },
-      });
+    });
 
     const lastUserMessage = messages[messages.length - 1];
-    const result = await chat.sendMessage({
-        message: { 
-            text: lastUserMessage.content, 
-            fileData: { 
-                displayName: lastUserMessage.attachments[0].name, 
-                fileUri: lastUserMessage.attachments[0].url, 
-                mimeType: lastUserMessage.attachments[0].type 
-            } 
+    const lastHasAttachment = Array.isArray(lastUserMessage.attachments) && lastUserMessage.attachments.length > 0;
+    const messagePayload: any = lastHasAttachment
+      ? {
+          text: lastUserMessage.content,
+          fileData: {
+            displayName: lastUserMessage.attachments[0].name,
+            fileUri: lastUserMessage.attachments[0].url,
+            mimeType: lastUserMessage.attachments[0].type,
+          },
         }
+      : {
+          text: lastUserMessage.content,
+        };
+
+    const result = await chat.sendMessage({
+        message: messagePayload
     });
 
     const botResponse = await ChatMessage.fromGeminiResponse(
