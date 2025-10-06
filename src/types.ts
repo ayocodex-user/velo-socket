@@ -21,7 +21,25 @@ export type Reaction ={
   timestamp: string
 }
 
-export type ChatType = 'Personal' | 'DMs' | 'Groups' | 'Channels';
+export type ChatType = 'Personal' | 'DM' | 'Group' | 'Channels';
+
+export type MessageType =
+  | "Text"
+  | "Image"
+  | "Video"
+  | "Audio"
+  | "File"
+  | "Location"
+  | "Contact"
+  | "Sticker"
+  | "Poll"
+  | "PollResponse"
+  | "PollEnd"
+  | "PollResult"
+  | "PollResult"
+  | "AnimatedGIF"
+  | "Announcement"
+  | "Link";
 
 export type UserSchema = {
   _id?: ObjectId | string | undefined,
@@ -51,10 +69,10 @@ export type UserSchema = {
   password: string,
   password_reset_time?: string,
   providers: {
-      [x: string]: {
-          id: string | undefined;
-          lastUsed: string;
-      };
+    [x: string]: {
+      id: string | undefined;
+      lastUsed: string;
+    };
   },
   resetAttempts?: number,
   resetToken?: string,
@@ -169,13 +187,13 @@ export type ChatAttributes = {
   timestamp: string; // Consider using a specific date/time type library
   unread: boolean;
   chatId?: string; // Optional chat ID
-  chatType: 'DMs' | 'Groups' | 'Channels';
+  chatType: ChatType;
   participants?: User[]; // Separate type for participants
   chatSettings?: ChatSettings; // Separate type for settings
   messageId?: string;
   senderId?: number; // Or string depending on your user ID format
   messageContent?: string;
-  messageType?: string;
+  messageType: MessageType;
   isRead?: boolean;
   reactions?: any[]; // Consider a specific type if needed
   attachments?: any[]; // Consider a specific type if needed
@@ -261,7 +279,7 @@ export type AttachmentSchema = {
   uploadedAt: string;
 };
 
-export interface MessageAttributes {
+export interface Message {
   _id?: ObjectId | string;
   chatId: string;
   sender: {
@@ -275,32 +293,21 @@ export interface MessageAttributes {
   content: string;
   timestamp: string;
   isRead?: { [participantId: string]: boolean }; // Object with participant IDs as keys and their read status as values
-  messageType: string;
+  chatType: ChatType;
+  messageType: MessageType;
   reactions: Reaction[];
-  attachments: Attachment[];
   quotedMessageId: string;
   status: msgStatus;
 }
 
-export interface MessageSchema {
-  _id?: ObjectId | string;
-  chatId: string;
-  sender: {
-    id: string;
-    name: string;
-    displayPicture: string;
-    username: string;
-    verified: boolean;
-  };
-  receiverId: string;
-  content: string;
-  timestamp: string;
-  isRead?: { [participantId: string]: boolean }; // Object with participant IDs as keys and their read status as values
-  messageType: string;
-  reactions: Reaction[];
+export interface MessageAttributes extends Message {
+  _id: string;
+  attachments: Attachment[];
+}
+
+export interface MessageSchema extends Message {
+  _id: ObjectId;
   attachments: string[];
-  quotedMessageId: string;
-  status: msgStatus;
 }
 
 export interface MessageAttributesClient extends MessageAttributes {
