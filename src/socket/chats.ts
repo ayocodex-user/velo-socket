@@ -1,9 +1,10 @@
-import { ObjectId, WithId } from "mongodb";
-import { deleteFileFromS3, uploadFileToS3 } from "../s3.js";
-import { AttachmentSchema, ChatParticipant, ChatSettings, ConvoType1, MessageAttributes, msgStatus, NewChat_, Participant, Reaction, UserSchema } from "../types.js";
+import { ObjectId } from "mongodb";
+import * as S3 from "../s3.js";
+import { AttachmentSchema, ChatParticipant, ConvoType1, MessageAttributes, MessageType, msgStatus, NewChat_, Reaction, UserSchema } from "../types.js";
 import { MongoDBClient } from "../mongodb.js";
 import { io, UserSocket } from '../socket.js';
 import { offlineMessageManager } from '../offline-messages.js';
+import { ChatMessage } from "../lib/ChatMessage.js";
 
 io.on('connection', async (socket: UserSocket) => {
   try {
@@ -34,18 +35,11 @@ io.on('connection', async (socket: UserSocket) => {
       // console.log(data.chat.participants)
       if (data.chat && data.chat.participants && data.chat.participants.length > 0) {
         const participantUserIds = Array.from(new Set(data.chat.participants.map(participant => participant.userId)));
-        const rooms = participantUserIds.map(id => `user:${id}`);
-        // Live emit to currently online participants
-        io.to(rooms).emit('newChat', data);
-        // Queue for offline participants
-        for (const id of participantUserIds) {
-          if (id !== userId) {
-            await offlineMessageManager.broadcastMessage({
-              type: 'newChat',
-              data
-            }, undefined, [id]);
-          }
-        }
+        
+        await offlineMessageManager.broadcastMessage({
+          type: 'newChat',
+          data
+        }, userId, participantUserIds);
       } else {
         console.warn('addChat: No participants found in chat data');
       }
@@ -67,23 +61,17 @@ io.on('connection', async (socket: UserSocket) => {
 
         if (existingReaction) {
           // If same reaction, remove it
+          const participants = (await db.chatParticipants().find({ chatId: message.chatId }).toArray()).map(p => p.userId);
           if (existingReaction.reaction === data.reaction) {
             await db.chatReactions().deleteOne({
               messageId: message._id.toString(),
               userId: data.userId
             });
-            if (message.messageType === 'Groups') {
-              io.to(`group:${message.chatId}`).emit('reactionRemoved', data);
-              const participants = await db.chatParticipants().find({ chatId: message.chatId }).toArray();
-              for (const p of participants) {
-                await offlineMessageManager.broadcastMessage({ type: 'reactionRemoved', data }, undefined, [p.userId]);
-              }
+            if (message.chatType === 'Group') {
+              await offlineMessageManager.broadcastMessage({ type: 'reactionRemoved', data }, undefined, participants);
             } else {
-              io.to([`user:${message.sender.id}`,`user:${message.receiverId}`]).emit('reactionRemoved', data);
               const targets = Array.from(new Set([message.sender.id, message.receiverId]));
-              for (const id of targets) {
-                await offlineMessageManager.broadcastMessage({ type: 'reactionRemoved', data }, undefined, [id]);
-              }
+              await offlineMessageManager.broadcastMessage({ type: 'reactionRemoved', data }, undefined, targets);
             }
           } else {
             // If different reaction, update it
@@ -94,18 +82,11 @@ io.on('connection', async (socket: UserSocket) => {
               },
               { $set: { reaction: data.reaction } }
             );
-            if (message.messageType === 'Groups') {
-              io.to(`group:${message.chatId}`).emit('reactionUpdated', data);
-              const participants = await db.chatParticipants().find({ chatId: message.chatId }).toArray();
-              for (const p of participants) {
-                await offlineMessageManager.broadcastMessage({ type: 'reactionUpdated', data }, undefined, [p.userId]);
-              }
+            if (message.chatType === 'Group') {
+              await offlineMessageManager.broadcastMessage({ type: 'reactionUpdated', data }, undefined, participants);
             } else {
-              io.to([`user:${message.sender.id}`,`user:${message.receiverId}`]).emit('reactionUpdated', data);
               const targets = Array.from(new Set([message.sender.id, message.receiverId]));
-              for (const id of targets) {
-                await offlineMessageManager.broadcastMessage({ type: 'reactionUpdated', data }, undefined, [id]);
-              }
+              await offlineMessageManager.broadcastMessage({ type: 'reactionUpdated', data }, undefined, targets);
             }
           }
         } else {
@@ -114,18 +95,12 @@ io.on('connection', async (socket: UserSocket) => {
             ...data,
             messageId: message._id.toString()
           });
-          if (message.messageType === 'Groups') {
-            io.to(`group:${message.chatId}`).emit('reactionAdded', data);
-            const participants = await db.chatParticipants().find({ chatId: message.chatId }).toArray();
-            for (const p of participants) {
-              await offlineMessageManager.broadcastMessage({ type: 'reactionAdded', data }, undefined, [p.userId]);
-            }
+          if (message.chatType === 'Group') {
+            const participants = (await db.chatParticipants().find({ chatId: message.chatId }).toArray()).map(p => p.userId);
+            await offlineMessageManager.broadcastMessage({ type: 'reactionAdded', data }, undefined, participants);
           } else {
-            io.to([`user:${message.sender.id}`,`user:${message.receiverId}`]).emit('reactionAdded', data);
             const targets = Array.from(new Set([message.sender.id, message.receiverId]));
-            for (const id of targets) {
-              await offlineMessageManager.broadcastMessage({ type: 'reactionAdded', data }, undefined, [id]);
-            }
+            await offlineMessageManager.broadcastMessage({ type: 'reactionAdded', data }, undefined, targets);
           }
         }
       } catch (error) {
@@ -168,7 +143,7 @@ io.on('connection', async (socket: UserSocket) => {
               for (const message of messages) {
                 if (message.attachments && message.attachments.length > 0) {
                   try {
-                    await deleteFileFromS3('files-for-chat', message.attachments);
+                    await S3.deleteFileFromS3('files-for-chat', message.attachments);
                   } catch (error) {
                     console.error('Error deleting attachment from S3:', error);
                   }
@@ -187,7 +162,7 @@ io.on('connection', async (socket: UserSocket) => {
             const message = await db.chatMessages().findOne({ _id: messageId });
             if (message && message.attachments && message.attachments.length > 0) {
               try {
-                await deleteFileFromS3('files-for-chat', message.attachments);
+                await S3.deleteFileFromS3('files-for-chat', message.attachments);
               } catch (error) {
                 console.error('Error deleting attachment from S3:', error);
               }
@@ -242,7 +217,7 @@ io.on('connection', async (socket: UserSocket) => {
           for (const file of data.attachments) {
             try {
               const fileBuffer = Buffer.from(file.data || ''); // Assuming file.data is the file content as a Buffer
-              const fileUrl = await uploadFileToS3('files-for-chat',fileBuffer, file.key, file.type);
+              const fileUrl = await S3.uploadFileToS3('files-for-chat',fileBuffer, file.key, file.type);
               attachmentsWithUrls.push({
                 _id: new ObjectId(),
                 name: file.name,
@@ -268,28 +243,21 @@ io.on('connection', async (socket: UserSocket) => {
         }
 
         // Messages Collection
-        let messageId: ObjectId;
-        try {
-          messageId = new ObjectId(data._id as unknown as string);
-        } catch (error) {
-          console.error('Invalid message ID format:', data._id);
-          io.to(`user:${senderId}`).emit('chatError', { error: 'Invalid message ID format' });
-          return;
-        }
 
-        const message: MessageAttributes = {
-          _id: messageId,
-          chatId: data.chatId, // Reference to the chat in DMs collection
+        const message = new ChatMessage({
+          _id: data._id,
+          chatId: data.chatId, // Reference to the chat in DM collection
           sender: data.sender,
           receiverId: data.receiverId,
           content: data.content,
           timestamp: data.timestamp ? new Date(data.timestamp).toISOString() : new Date().toISOString(),
-          messageType: data.messageType,
+          chatType: data.chatType,
           reactions: data.reactions || [],
           attachments: attachmentsWithUrls || [],
           quotedMessageId: data.quotedMessageId,
           status: 'sent' as msgStatus,
-        };
+          messageType: data.messageType as MessageType
+        });
         
         // Assuming `message` is defined and contains the necessary properties
         const chatsParticipants = data.participants || await db.chatParticipants().find({ chatId: message.chatId }).toArray();
@@ -418,10 +386,7 @@ io.on('connection', async (socket: UserSocket) => {
         }
 
         try {
-          await db.chatMessages().insertOne({
-            ...message,
-            attachments: []
-          });
+          await db.chatMessages().insertOne(message);
         } catch (error) {
           console.error('Error inserting chat message:', error);
           io.to(`user:${senderId}`).emit('chatError', { error: 'Failed to save message' });
@@ -467,43 +432,27 @@ io.on('connection', async (socket: UserSocket) => {
           message.isRead = { [senderId]: true };
         }
 
-        if (data.messageType === 'Groups') {
+        if (data.chatType === 'Group') {
           try {
-            // Live emit to group members in room
-            io.to(`group:${data.receiverId}`).emit('newMessage', message);
-          } catch (error) {
-            console.error('Error emitting group message:', error);
-          }
-          try {
-            // Queue for offline group members: fetch participants
+            // Live emit to group members in room and Queue for offline group members: fetch participants
             const participants = await db.chatParticipants().find({ chatId: data.chatId }).toArray();
             const userIds = participants.map(p => p.userId).filter(Boolean);
-            for (const id of userIds) {
-              await offlineMessageManager.broadcastMessage({
-                type: 'newMessage',
-                data: message
-              }, undefined, [id]);
-            }
+            await offlineMessageManager.broadcastMessage({
+              type: 'newMessage',
+              data: message.toMessageAttributes(attachmentsWithUrls)
+            }, undefined, userIds);
           } catch (error) {
             console.error('Error queuing group message for offline users:', error);
           }
         } else {
           try {
             // Live emit to sender and receiver
-            io.to(`user:${senderId}`).emit('newMessage', message);
-            io.to(`user:${data.receiverId}`).emit('newMessage', message);
-          } catch (error) {
-            console.error('Error emitting direct message:', error);
-          }
-          try {
             // Queue for offline sender/receiver
             const targets = Array.from(new Set([senderId, data.receiverId]));
-            for (const id of targets) {
-              await offlineMessageManager.broadcastMessage({
-                type: 'newMessage',
-                data: message
-              }, undefined, [id]);
-            }
+            await offlineMessageManager.broadcastMessage({
+              type: 'newMessage',
+              data: message.toMessageAttributes(attachmentsWithUrls)
+            }, undefined, targets);
           } catch (error) {
             console.error('Error queuing direct message for offline users:', error);
           }

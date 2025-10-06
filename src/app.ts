@@ -1,9 +1,10 @@
 import { config } from 'dotenv';
 config()
 import cors from "cors";
-import Redis from "ioredis";
+import { dirname } from 'path';
+import { fileURLToPath } from 'url';
 import { join } from 'path';
-import { updateUserOnlineStatus, updateLastActive, fetchUserGroups, updateReadReceipts, HEARTBEAT_INTERVAL, ONLINE_USERS_KEY, USER_TIMEOUT } from './utils.js';
+import { updateUserOnlineStatus, updateLastActive, fetchUserGroup, updateReadReceipts, HEARTBEAT_INTERVAL, ONLINE_USERS_KEY, USER_TIMEOUT } from './utils.js';
 import { getMongoDb } from './mongodb.js';
 import './socket/chats.js'
 import './socket/blog.js'
@@ -12,14 +13,16 @@ import './socket/calls.js'
 import { io, UserSocket } from './socket.js';
 import { app, corsOptions, server } from './server.js';
 import callsRouter from './routes/calls.js';
-import { OfflineMessageManager, offlineMessageManager } from './offline-messages.js';
+import { offlineMessageManager } from './offline-messages.js';
 import { redis as sharedRedis } from './redis.js';
 import { checkPortBySystem } from './checkPort.js';
+import chatHandler from './api/chat.js';
 
 app.use(cors(corsOptions));
 
 // API routes
 app.use('/api/calls', callsRouter);
+app.use('/api/chat', chatHandler)
 
 let port = 8080;
 
@@ -47,7 +50,7 @@ io.on('connection', async (socket: UserSocket) => {
     // console.log('Connected to the socket ctrl:', userId);
     if (userId) {
       const isAlreadyConnected = await redis.sismember(ONLINE_USERS_KEY, userId);
-      const groups: string[] = (await fetchUserGroups(userId)).map(group =>`group:${group._id.toString()}`);
+      const groups: string[] = (await fetchUserGroup(userId)).map(group =>`group:${group._id.toString()}`);
       if (!isAlreadyConnected) {
         await redis.sadd(ONLINE_USERS_KEY, userId);
         await updateUserOnlineStatus(userId, true, redis, USER_TIMEOUT);
@@ -179,7 +182,7 @@ io.on('connection', async (socket: UserSocket) => {
     roomId: string;
     targetUserId?: string;
     callType: 'audio' | 'video';
-    chatType: 'DMs' | 'Groups';
+    chatType: 'DM' | 'Group';
   }) => {
     const { handleCallInvite } = await import('./socket/calls.js');
     handleCallInvite(socket, data);
@@ -274,7 +277,9 @@ app.use((err: any, req: any, res: any, next: any) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
-app.get("*", (_, res) => {
+app.all("*", (_, res) => {
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = dirname(__filename);
   res.status(404).sendFile(join(__dirname.replace('src', 'public'), '/404.html'));
 })
 
