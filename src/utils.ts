@@ -40,9 +40,9 @@ export async function updateLastActive(userId: string, redis: Redis) {
   await redis.set(`user:${userId}:lastActive`, new Date().toISOString());
 }
 
-export const fetchUserGroups = async (userId: string) => {
+export const fetchUserGroup = async (userId: string) => {
   const db = await new MongoDBClient().init();
-  const participantList = await db.chatParticipants().find({ userId: userId, chatType: 'Groups' }).toArray();
+  const participantList = await db.chatParticipants().find({ userId: userId, chatType: 'Group' }).toArray();
   const chatIds = participantList.map(chat => chat.chatId);
   
   return db.chats().find({ _id: { $in: chatIds.map(id => new ObjectId(id)) } }).toArray();

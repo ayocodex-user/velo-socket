@@ -1,6 +1,7 @@
 import { io } from '../socket.js';
 import { redis } from '../app.js';
 import { ONLINE_USERS_KEY } from '../utils.js';
+import { offlineMessageManager } from '../offline-messages.js';
 
 io.on('connection', async (socket) => {
     const userId = socket.handshake.query.userId as string;
@@ -10,13 +11,14 @@ io.on('connection', async (socket) => {
         try {
             const { followedDetails, followerDetails, time } = data;
             
-            // Notify the followed user
-            // io.to(`user:${followedId}`).emit('followNotification', {
-            io.emit('followNotification', {
-                followedDetails,
-                followerDetails,
-                timestamp: time
-            });
+            await offlineMessageManager.broadcastMessage({
+                type: 'followNotification',
+                data: {
+                    followedDetails,
+                    followerDetails,
+                    timestamp: time
+                }
+            }, undefined, [followedDetails._id]);
 
             // Update online users list if needed
             const isOnline = Boolean(await redis.sismember(ONLINE_USERS_KEY, followerDetails._id));
@@ -33,13 +35,14 @@ io.on('connection', async (socket) => {
         try {
             const { followedDetails, followerDetails, time } = data;
             
-            // Notify the unfollowed user
-            // io.to(`user:${followedId}`).emit('followNotification', {
-            io.emit('followNotification', {
-                followedDetails,
-                followerDetails,
-                timestamp: time
-            });
+            await offlineMessageManager.broadcastMessage({
+                type: 'followNotification',
+                data: {
+                    followedDetails,
+                    followerDetails,
+                    timestamp: time
+                }
+            }, undefined, [followedDetails._id]);
         } catch (error) {
             console.error('Error handling unfollow event:', error);
         }

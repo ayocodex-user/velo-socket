@@ -15,7 +15,8 @@ export interface OfflineMessage {
     | 'reactionRemoved'
     | 'reactionUpdated'
     | 'conversationUpdated'
-    | 'joinChat';
+    | 'joinChat'
+    | 'followNotification';
   userId: string;
   data: any;
   timestamp: number;
@@ -86,9 +87,7 @@ export class OfflineMessageManager {
    */
   async getOfflineUsers(): Promise<string[]> {
     const allUsers = await this.redis.smembers('online_users');
-    // In a real app, you'd have a separate set of all users
-    // For now, we'll work with the online users set
-    return []; // This would be populated from your user database
+    return [];
   }
 
   /**
@@ -130,7 +129,6 @@ export class OfflineMessageManager {
     if (messages.length > 0) {
       // Send all pending messages
       for (const message of messages) {
-        console.log('message', message);
         io.to(`user:${userId}`).emit(message.type, message.data);
       }
       
@@ -143,4 +141,4 @@ export class OfflineMessageManager {
 }
 
 // Export singleton instance - will be initialized in app.ts
-export let offlineMessageManager: OfflineMessageManager = new OfflineMessageManager(sharedRedis);
+export let offlineMessageManager = new OfflineMessageManager(sharedRedis);

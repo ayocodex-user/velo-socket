@@ -18,7 +18,7 @@ export const handleCallInvite = (socket: UserSocket, data: {
   roomId: string;
   targetUserId?: string;
   callType: 'audio' | 'video';
-  chatType: 'DMs' | 'Groups';
+  chatType: 'DM' | 'Group';
 }) => {
   const { roomId, targetUserId, callType, chatType } = data;
   const callerId = socket.handshake.query.userId as string;
@@ -40,7 +40,7 @@ export const handleCallInvite = (socket: UserSocket, data: {
   
   console.log(`Call invitation: ${callerId} -> ${roomId} (${callType})`);
   
-  if (chatType === 'Groups') {
+  if (chatType === 'Group') {
     // Group call - notify all group members
     io.to(`group:${roomId}`).emit('call:invite', {
       callId,

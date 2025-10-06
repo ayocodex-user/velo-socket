@@ -171,7 +171,6 @@ io.on('connection', (socket) => {
                     { $inc: { NoOfShares: -1 } }
                 );
 
-                // Use offline message system for post updates
                 await offlineMessageManager.broadcastMessage({
                     type: 'deletePost',
                     data: { 
@@ -212,7 +211,6 @@ io.on('connection', (socket) => {
                         { $inc: { NoOfShares: 1 } }
                     );
             
-                    // Use offline message system for post updates
                     await offlineMessageManager.broadcastMessage({
                         type: 'updatePost',
                         data: { 
@@ -266,7 +264,6 @@ io.on('connection', (socket) => {
                         { $inc: { NoOfShares: 1 } }
                     );
             
-                    // Use offline message system for post updates
                     await offlineMessageManager.broadcastMessage({
                         type: 'updatePost',
                         data: { 

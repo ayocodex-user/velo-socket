@@ -15,6 +15,7 @@
   "description": "",
   "dependencies": {
     "@aws-sdk/client-s3": "^3.738.0",
+    "@google/genai": "^1.21.0",
     "axios": "^1.7.7",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
