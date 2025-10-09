@@ -1,7 +1,7 @@
 import { ObjectId } from "mongodb";
 
-import { MongoDBClient } from "../mongodb";
-import { AccountType, ChatParticipant, ChatType, NewChatSettings, Theme, UserSchema } from "../types";
+import { MongoDBClient } from "../mongodb.js";
+import { AccountType, Theme, UserSchema } from "../types.js";
 
 /**
  * Represents a user object based on the provided MongoDB document structure.
