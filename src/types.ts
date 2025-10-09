@@ -1,6 +1,6 @@
 import { ObjectId } from "mongodb";
 
-export type User = {
+type User = {
   name: string;
   id: number;
 }
@@ -21,6 +21,14 @@ export type Reaction ={
   timestamp: string
 }
 
+export enum AccountType {
+  HUMAN = "human",
+  ORGANIZATION = "organization",
+  BOT = "bot",
+}
+
+export type Theme = "system" | "light" | "dark";
+
 export type ChatType = 'Personal' | 'DM' | 'Group' | 'Channels';
 
 export type MessageType =
@@ -39,24 +47,25 @@ export type MessageType =
   | "PollResult"
   | "AnimatedGIF"
   | "Announcement"
-  | "Link";
+  | "Link"
+  | "Markdown";
 
 export type UserSchema = {
-  _id?: ObjectId | string | undefined,
+  _id: ObjectId,
   bio?: string,
   confirmationToken?: string,
   coverPhoto?: string,
   dob?: string,
   displayPicture?: string,
-  email?: string,
+  email: string,
   firstname: string,
   followers?: number,
   following?: number,
-  isEmailConfirmed?: boolean,
+  isEmailConfirmed: boolean,
   isFollowing?: boolean,
   isPrivate?: boolean,
   lastLogin?: string,
-  lastname?: string,
+  lastname: string,
   lastResetAttempt?: {
     [x: string]: string
   },
@@ -65,25 +74,24 @@ export type UserSchema = {
   location?: string,
   loginToken?: string,
   name: string,
-  noOfUpdates?: number,
+  noOfUpdates: number,
   password: string,
   password_reset_time?: string,
-  providers: {
-    [x: string]: {
-      id: string | undefined;
-      lastUsed: string;
-    };
-  },
-  resetAttempts?: number,
+  providers: Record<string, {
+    id: string | undefined;
+    lastUsed: string;
+  }>;
+  resetAttempts: number,
   resetToken?: string,
   resetTokenExpiry?: number,
-  signUpCount?: number,
-  theme?: string,
+  signUpCount: number,
+  theme: Theme,
   time: string,
   userId: string,
   username: string,
-  verified?: boolean,
-  website?: string
+  verified: boolean,
+  website?: string,
+  accountType: AccountType,
 };
 
 export type UserSettings = {
