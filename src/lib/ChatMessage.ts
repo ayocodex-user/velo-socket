@@ -111,7 +111,7 @@ export class ChatMessage implements MessageSchema {
                 [botUserId]: true,    // Bot considers its own message handled/read
             },
             sender: { 
-                id: botUser.userId, 
+                id: botUser._id.toString(), 
                 name: botUser.name, 
                 displayPicture: botUser.displayPicture || "", 
                 username: botUser.username, 
