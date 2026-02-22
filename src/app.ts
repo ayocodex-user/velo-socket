@@ -24,7 +24,8 @@ app.use(cors(corsOptions));
 app.use('/api/calls', callsRouter);
 app.use('/api/chat', chatHandler)
 
-let port = 8080;
+let port = Number(process.env.PORT) || 8080;
+console.log('Port:', port);
 
 export const redis = sharedRedis;
 

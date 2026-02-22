@@ -40,7 +40,7 @@ const chatHandler: RequestHandler = async (req, res) => {
     const messages = req.body.messages as MessageAttributes[];
 
     const chat = genAI.chats.create({
-        model: "gemini-2.0-flash",
+        model: process.env.Gemini_Model || '',
         history: messages.slice(0, -1).map(msg => {
             const hasAttachment = Array.isArray(msg.attachments) && msg.attachments.length > 0;
             const parts = [
