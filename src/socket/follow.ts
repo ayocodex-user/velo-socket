@@ -4,14 +4,12 @@ import { ONLINE_USERS_KEY } from '../utils.js';
 import { offlineMessageManager } from '../offline-messages.js';
 
 io.on('connection', async (socket) => {
-    const userId = socket.handshake.query.userId as string;
-
     // Handle follow event
-    socket.on('follow', async (data: { followedDetails: any, followerDetails: any, time: string }) => {
-        console.log('follow event received', data);
+    socket.on('follow', async (data: { followedDetails: any, followerDetails: any, time: string }, ack?: () => void) => {
         try {
             const { followedDetails, followerDetails, time } = data;
-            
+            const followedId = String(followedDetails._id);
+
             await offlineMessageManager.broadcastMessage({
                 type: 'followNotification',
                 data: {
@@ -19,24 +17,26 @@ io.on('connection', async (socket) => {
                     followerDetails,
                     timestamp: time
                 }
-            }, undefined, [followedDetails._id]);
+            }, undefined, [followedId]);
 
             // Update online users list if needed
-            const isOnline = Boolean(await redis.sismember(ONLINE_USERS_KEY, followerDetails._id));
+            const isOnline = Boolean(await redis.sismember(ONLINE_USERS_KEY, String(followerDetails._id)));
             if (isOnline) {
-                io.emit('userStatus', { userId: followerDetails._id?.toString(), status: 'online' });
+                io.emit('userStatus', { userId: String(followerDetails._id), status: 'online' });
             }
+            ack?.();
         } catch (error) {
             console.error('Error handling follow event:', error);
+            ack?.();
         }
     });
 
     // Handle unfollow event
-    socket.on('unfollow', async (data: { followedDetails: any, followerDetails: any, time: string }) => {
-        console.log('unfollow event received', data);
+    socket.on('unfollow', async (data: { followedDetails: any, followerDetails: any, time: string }, ack?: () => void) => {
         try {
             const { followedDetails, followerDetails, time } = data;
-            
+            const followedId = String(followedDetails._id);
+
             await offlineMessageManager.broadcastMessage({
                 type: 'followNotification',
                 data: {
@@ -44,9 +44,11 @@ io.on('connection', async (socket) => {
                     followerDetails,
                     timestamp: time
                 }
-            }, undefined, [followedDetails._id]);
+            }, undefined, [followedId]);
+            ack?.();
         } catch (error) {
             console.error('Error handling unfollow event:', error);
+            ack?.();
         }
     });
 }); 
