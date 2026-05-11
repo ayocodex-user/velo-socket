@@ -17,7 +17,7 @@ io.on('connection', async (socket) => {
                     followerDetails,
                     timestamp: time
                 }
-            }, undefined, [followedId]);
+            }, undefined, [followedId, String(followerDetails._id)]);
 
             // Update online users list if needed
             const isOnline = Boolean(await redis.sismember(ONLINE_USERS_KEY, String(followerDetails._id)));
@@ -44,7 +44,7 @@ io.on('connection', async (socket) => {
                     followerDetails,
                     timestamp: time
                 }
-            }, undefined, [followedId]);
+            }, undefined, [followedId, String(followerDetails._id)]);
             ack?.();
         } catch (error) {
             console.error('Error handling unfollow event:', error);
