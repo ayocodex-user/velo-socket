@@ -15,7 +15,8 @@ io.on('connection', async (socket) => {
                 data: {
                     followedDetails,
                     followerDetails,
-                    timestamp: time
+                    timestamp: time,
+                    following: true,
                 }
             }, undefined, [followedId, String(followerDetails._id)]);
 
@@ -42,7 +43,8 @@ io.on('connection', async (socket) => {
                 data: {
                     followedDetails,
                     followerDetails,
-                    timestamp: time
+                    timestamp: time,
+                    following: false,
                 }
             }, undefined, [followedId, String(followerDetails._id)]);
             ack?.();
