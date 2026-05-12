@@ -1,7 +1,7 @@
 import { config } from 'dotenv';
 config()
 import { Db, MongoClient, ServerApiVersion } from 'mongodb';
-import { AttachmentSchema, ChatData, ChatParticipant, ChatSettings, FollowersSchema, MessageSchema, PostSchema, Reaction, ReadReceipt, TokensSchema, UserSchema, UserSettings, VideoSchema } from './types';
+import { AttachmentSchema, ChatData, ChatParticipant, ChatSettings, FollowersSchema, MessageSchema, PostBookmarkSchema, PostLikesSchema, PostSchema, Reaction, ReadReceipt, TokensSchema, UserSchema, UserSettings, VideoSchema } from './types';
 
 const uri = process.env.MONGOLINK || '';
 
@@ -106,7 +106,7 @@ export class MongoDBClient {
    * @returns Collection for storing bookmarked posts
    */
   postsBookmarks() {
-    return this.db.collection<PostSchema>('Posts_Bookmarks');
+    return this.db.collection<PostBookmarkSchema>('Posts_Bookmarks');
   }
 
   /**
@@ -122,7 +122,7 @@ export class MongoDBClient {
    * @returns Collection for storing post likes
    */
   postsLikes() {
-    return this.db.collection<PostSchema>('Posts_Likes');
+    return this.db.collection<PostLikesSchema>('Posts_Likes');
   }
 
   /**

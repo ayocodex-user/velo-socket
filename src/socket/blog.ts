@@ -1,6 +1,6 @@
 import { Collection, Document, ObjectId } from "mongodb";
-import { getMongoDb } from "../mongodb.js";
-import { BlogPost, ReactionType, SharedBlogPost } from "../types.js";
+import { getMongoDb, MongoDBClient } from "../mongodb.js";
+import { BlogPost, PostSchema, ReactionType, SharedBlogPost } from "../types.js";
 import { io } from '../socket.js';
 import { deleteFileFromS3 } from "../s3.js";
 import { offlineMessageManager } from '../offline-messages.js';
@@ -12,12 +12,12 @@ io.on('connection', (socket) => {
 
         try {
             // Connect to MongoDB
-            const db = await getMongoDb();
-            const collection = db.collection('Users');
-            const posts = db.collection('Posts');
-            const shares = db.collection('Posts_Shares');
-            const comments = db.collection('Posts_Comments');
-            let PostsOrSharesOrComments: Collection<Document>;
+            const db = await new MongoDBClient().init();
+            const collection = db.users();
+            const posts = db.posts();
+            const shares = db.postsShares();
+            const comments = db.postsComments();
+            let PostsOrSharesOrComments: Collection<PostSchema>;
         
             // Retrieve user and post data
             const user = await collection.findOne({ _id: new ObjectId(userId.toString()) });
@@ -47,7 +47,7 @@ io.on('connection', (socket) => {
 
             if (!data.type) return io.to(`user:${userId}`).emit("post_reaction_response", { message: "This is an invalid reaction!", success: false, postId: data.postId, reaction: data.type });
 
-            const currentCollection = data.type.includes('like') ? db.collection('Posts_Likes') : db.collection('Posts_Bookmarks');
+            const currentCollection = data.type.includes('like') ? db.postsLikes() : db.postsBookmarks();
             
             const existingReaction = await currentCollection.findOne({ postId: data.postId, userId: userId });
 
@@ -80,7 +80,19 @@ io.on('connection', (socket) => {
                     });
                 }
                 // Add the reaction
-                await currentCollection.insertOne({ postId: data.postId, userId: userId })
+                const reactionDoc: {
+                    _id: ObjectId;
+                    postId: string;
+                    userId: string;
+                    searchText?: string;
+                } = { _id: new ObjectId(), postId: data.postId, userId };
+                if (data.type === "bookmark") {
+                    const parts = [post.Caption, post.Username, post.NameOfPoster, post.PostID]
+                        .filter((v) => v != null && String(v).trim() !== "")
+                        .map((v) => String(v));
+                    reactionDoc.searchText = parts.join("\n");
+                }
+                await currentCollection.insertOne(reactionDoc)
 
                 
                 await PostsOrSharesOrComments.updateOne(
@@ -117,12 +129,12 @@ io.on('connection', (socket) => {
 
         try {
             // Connect to MongoDB
-            const db = await getMongoDb();
-            const collection = db.collection('Users');
-            const shares = db.collection('Posts_Shares');
-            const posts = db.collection('Posts');
-            const comments = db.collection('Posts_Comments');
-            let PostsOrSharesOrComments: Collection<Document>;
+            const db = await new MongoDBClient().init();
+            const collection = db.users();
+            const shares = db.postsShares();
+            const posts = db.posts();
+            const comments = db.postsComments();
+            let PostsOrSharesOrComments: Collection<PostSchema>;
         
             // Retrieve user and post data
             const user = await collection.findOne({ _id: new ObjectId(userId.toString()) });
@@ -195,7 +207,7 @@ io.on('connection', (socket) => {
                         UserId: userId,
                         DisplayPicture: user.displayPicture || "",
                         NameOfPoster: `${user.firstname ?? ""} ${user.lastname ?? ""}`.trim(),
-                        Verified: user.Verified ?? false,
+                        Verified: user.verified ?? false,
                         Username: user.username || "",
                         IsFollowing: false,
                         Type: "repost",
@@ -205,7 +217,7 @@ io.on('connection', (socket) => {
                     };
                     repost.PostID = repost._id.toString();
 
-                    await shares.insertOne(repost);
+                    await shares.insertOne(repost as PostSchema);
                     await PostsOrSharesOrComments.updateOne(
                         { PostID: data.post.PostID },
                         { $inc: { NoOfShares: 1 } }
@@ -236,7 +248,7 @@ io.on('connection', (socket) => {
                         UserId: userId,
                         DisplayPicture: user.displayPicture || "",
                         NameOfPoster: `${user.firstname ?? ""} ${user.lastname ?? ""}`.trim(),
-                        Verified: user.Verified ?? false,
+                        Verified: user.verified ?? false,
                         TimeOfPost: new Date().toISOString(),
                         Visibility: data.post.Visibility,
                         Caption: data.post.Caption ?? "", // Include user's caption

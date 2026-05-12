@@ -126,7 +126,7 @@ export type VideoSchema = {
 }
 
 export type PostSchema = {
-  _id: string;
+  _id: ObjectId;
   UserId: string;
   DisplayPicture: string;
   NameOfPoster: string;
@@ -151,6 +151,17 @@ export type PostSchema = {
   ParentId: string;
   OriginalPostId?: string;
 }
+
+export interface PostInfo {
+  _id: ObjectId;
+  postId: string;
+  userId: string;
+  /** Denormalized for MongoDB `$text` on Posts_Bookmarks. */
+  searchText?: string;
+}
+
+export type PostBookmarkSchema = PostInfo
+export type PostLikesSchema = PostInfo
 
 export type ChatParticipant = {
   _id: ObjectId;
