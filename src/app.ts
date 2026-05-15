@@ -10,6 +10,7 @@ import './socket/chats.js'
 import './socket/blog.js'
 import './socket/follow.js'
 import './socket/calls.js'
+import './socket/status.js'
 import { io, UserSocket } from './socket.js';
 import { app, corsOptions, server } from './server.js';
 import callsRouter from './routes/calls.js';

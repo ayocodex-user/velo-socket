@@ -163,6 +163,29 @@ export interface PostInfo {
 export type PostBookmarkSchema = PostInfo
 export type PostLikesSchema = PostInfo
 
+export type StatusMediaType = 'image' | 'video';
+export type StatusVisibility = 'followers' | 'everyone';
+
+export type StatusSchema = {
+  _id: ObjectId;
+  userId: string;
+  mediaUrl: string;
+  mediaKey: string;
+  mediaType: StatusMediaType;
+  caption: string;
+  createdAt: string;
+  expiresAt: string;
+  visibility: StatusVisibility;
+}
+
+export type StatusViewerSchema = {
+  _id: ObjectId;
+  statusId: string;
+  ownerId: string;
+  viewerId: string;
+  viewedAt: string;
+}
+
 export type ChatParticipant = {
   _id: ObjectId;
   chatId: string;
